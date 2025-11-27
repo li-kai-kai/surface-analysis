@@ -16,7 +16,9 @@ def open_browser():
 
 def main():
     """主启动函数"""
-    if getattr(sys, 'frozen', False):
+    is_frozen = getattr(sys, 'frozen', False)
+    
+    if is_frozen:
         # 如果是打包后的exe (onefile模式), 资源文件解压在 sys._MEIPASS
         work_dir = sys._MEIPASS
     else:
@@ -30,17 +32,23 @@ def main():
     browser_thread = threading.Thread(target=open_browser, daemon=True)
     browser_thread.start()
     
-    # 启动Streamlit
-    sys.argv = [
+    # 根据环境配置 Streamlit 参数
+    streamlit_args = [
         "streamlit",
         "run",
         "app.py",
         "--server.headless=true",
-        "--server.port=8501",
         "--browser.gatherUsageStats=false",
-        "--server.fileWatcherType=none"  # 禁用文件监视以提高性能
     ]
     
+    # 打包环境下的额外配置
+    if is_frozen:
+        streamlit_args.extend([
+            "--server.fileWatcherType=none",  # 禁用文件监视
+            "--global.developmentMode=false",  # 禁用开发模式，避免配置冲突
+        ])
+    
+    sys.argv = streamlit_args
     sys.exit(stcli.main())
 
 if __name__ == "__main__":
