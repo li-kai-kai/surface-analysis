@@ -23,16 +23,34 @@ def calculate_surface_form(x, y, z):
     return z_resid, pv
 
 
-def calculate_dynamic_sfma(x, y, z, slit_w=0.026, slit_h=0.008, n_shifts=10):
+def calculate_dynamic_sfma(
+    x,
+    y,
+    z,
+    slit_w=0.026,
+    slit_h=0.008,
+    slit_step_x=0.013,
+    slit_step_y=0.001,
+):
     """
     动态移动狭缝模拟 (SFMA)
-    在Y方向滑动窗口,每次移除局部倾斜,累积残差
+    蛇形移动:从左下角开始,向上移动,然后向右移动一列,再向下移动,如此往复
+    每次移除局部倾斜,累积残差并计算均值
+
+    参数:
+        x, y, z: 数据点坐标和高度值
+        slit_w, slit_h: 狭缝的宽度和高度,单位米
+        slit_step_x: slit在X方向的移动步长,单位米 (默认: 0.026m = 26mm)
+        slit_step_y: slit在Y方向的移动步长,单位米 (默认: 0.0001m = 1mm)
     """
-    step_x = 0.0034
-    step_y = 0.0005
 
     min_x, max_x = np.min(x), np.max(x)
     min_y, max_y = np.min(y), np.max(y)
+
+    x_sorted = np.sort(np.unique(x))
+    y_sorted = np.sort(np.unique(y))
+    step_x = np.median(np.diff(x_sorted)) if len(x_sorted) > 1 else (max_x - min_x)
+    step_y = np.median(np.diff(y_sorted)) if len(y_sorted) > 1 else (max_y - min_y)
 
     n_cols = int(round((max_x - min_x) / step_x)) + 1
     n_rows = int(round((max_y - min_y) / step_y)) + 1
@@ -49,14 +67,15 @@ def calculate_dynamic_sfma(x, y, z, slit_w=0.026, slit_h=0.008, n_shifts=10):
 
     slit_px_w = int(round(slit_w / step_x))
     slit_px_h = int(round(slit_h / step_y))
+    slit_step_px_x = int(round(slit_step_x / step_x))  # X方向移动步长(像素)
+    slit_step_px_y = int(round(slit_step_y / step_y))  # Y方向移动步长(像素)
 
-    shift = 0
+    # 使用均值累积
     layout_sum = np.zeros((n_rows, n_cols))
     layout_count = np.zeros((n_rows, n_cols))
 
-    start_px = int(round(shift / step_x))
-
-    for col_start_idx in range(start_px - slit_px_w, n_cols, slit_px_w):
+    # 蛇形移动: 使用物理距离步长(转换为像素)
+    for col_idx, col_start_idx in enumerate(range(-slit_px_w, n_cols, slit_step_px_x)):
         col_end_idx = col_start_idx + slit_px_w
         valid_start = max(0, col_start_idx)
         valid_end = min(n_cols, col_end_idx)
@@ -68,7 +87,13 @@ def calculate_dynamic_sfma(x, y, z, slit_w=0.026, slit_h=0.008, n_shifts=10):
         col_x = GX[:, valid_start:valid_end]
         col_y = GY[:, valid_start:valid_end]
 
-        for y_start_idx in range(0, n_rows - slit_px_h + 1, 1):
+        # 偶数列向上(从0开始),奇数列向下(从最大开始)
+        if col_idx % 2 == 0:
+            y_range = range(0, n_rows - slit_px_h + 1, slit_step_px_y)
+        else:
+            y_range = range(n_rows - slit_px_h, -1, -slit_step_px_y)
+
+        for y_start_idx in y_range:
             y_end_idx = y_start_idx + slit_px_h
 
             win_z = col_z[y_start_idx:y_end_idx, :]
@@ -94,9 +119,11 @@ def calculate_dynamic_sfma(x, y, z, slit_w=0.026, slit_h=0.008, n_shifts=10):
             acc_sum_slice = layout_sum[y_start_idx:y_end_idx, valid_start:valid_end]
             acc_count_slice = layout_count[y_start_idx:y_end_idx, valid_start:valid_end]
 
+            # 累积求和和计数
             acc_sum_slice[valid_res_mask] += residual[valid_res_mask]
             acc_count_slice[valid_res_mask] += 1
 
+    # 计算均值
     with np.errstate(divide="ignore", invalid="ignore"):
         result_map = layout_sum / layout_count
 
@@ -109,11 +136,14 @@ def calculate_local_tilt(x, y, z):
     计算局部倾斜角度 (梯度幅值)
     使用中心差分法计算X和Y方向斜率,边缘使用前向/后向差分,角点使用局部平面拟合
     """
-    step_x = 0.0034
-    step_y = 0.0005
 
     min_x, max_x = np.min(x), np.max(x)
     min_y, max_y = np.min(y), np.max(y)
+
+    x_sorted = np.sort(np.unique(x))
+    y_sorted = np.sort(np.unique(y))
+    step_x = np.median(np.diff(x_sorted)) if len(x_sorted) > 1 else (max_x - min_x)
+    step_y = np.median(np.diff(y_sorted)) if len(y_sorted) > 1 else (max_y - min_y)
 
     n_cols = int(round((max_x - min_x) / step_x)) + 1
     n_rows = int(round((max_y - min_y) / step_y)) + 1
@@ -233,6 +263,12 @@ def calculate_nce(x, y, z, field_size_x=0.026, field_size_y=0.008, offset_x=0.0)
     min_x, max_x = np.min(x), np.max(x)
     min_y, max_y = np.min(y), np.max(y)
 
+    # 从数据推断物理间距
+    x_sorted = np.sort(np.unique(x))
+    y_sorted = np.sort(np.unique(y))
+    step_x = np.median(np.diff(x_sorted)) if len(x_sorted) > 1 else (max_x - min_x)
+    step_y = np.median(np.diff(y_sorted)) if len(y_sorted) > 1 else (max_y - min_y)
+
     start_x = min_x + offset_x
     n_cols = int(np.ceil((max_x - start_x) / field_size_x)) + 1
     n_rows = int(np.ceil((max_y - min_y) / field_size_y))
@@ -243,7 +279,7 @@ def calculate_nce(x, y, z, field_size_x=0.026, field_size_y=0.008, offset_x=0.0)
     grid_lines_x = x_edges
     grid_lines_y = y_edges
 
-    expected_points = (field_size_x * field_size_y) / (0.0034 * 0.0005)
+    expected_points = (field_size_x * field_size_y) / (step_x * step_y)
     min_points = max(10, int(expected_points * 0.1))
 
     for i in range(len(x_edges) - 1):
@@ -586,13 +622,17 @@ def process_xyz(
         plot_nce_heatmap(x_arr, y_arr, z_nce, std_nce, gx, gy, nce_image_path)
 
         # 3. SFMA分析
-        z_sfma = calculate_dynamic_sfma(x_arr, y_arr, z_resid, slit_h=slit_height)
+        z_sfma = calculate_dynamic_sfma(
+            x_arr,
+            y_arr,
+            z_resid,
+            slit_h=slit_height,
+        )
 
         valid_sfma = z_sfma[~np.isnan(z_sfma)]
         mean_sfma = np.median(valid_sfma)
         std_sfma_raw = np.std(valid_sfma)
-        mask_sigma = np.abs(valid_sfma - mean_sfma) <= 3 * std_sfma_raw
-        filtered_sfma = valid_sfma[mask_sigma]
+        filtered_sfma = valid_sfma
 
         std_sfma = np.std(filtered_sfma)
         sfma_metric = np.median(filtered_sfma) + 3 * std_sfma
