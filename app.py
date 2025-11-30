@@ -141,6 +141,17 @@ with st.sidebar:
         step=0.1,
     )
 
+    # SLA阈值参数
+    sla_threshold = st.number_input(
+        "SLA超差阈值 (nm)",
+        min_value=1.0,
+        max_value=200.0,
+        value=50.0,
+        format="%.1f",
+        step=1.0,
+        help="SLA超差阈值，用于标识超过该值的区域",
+    )
+
     # 分析按钮
     analyze_button = st.button("开始分析", type="primary", use_container_width=True)
 
@@ -194,6 +205,7 @@ else:
                         step_y=sub_y * 0.001,  # mm -> m
                         slit_height=slit_height * 0.001,  # mm -> m
                         edge_clearance=edge_clearance * 0.001,  # mm -> m
+                        sla_threshold=sla_threshold,  # nm
                     )
 
                     st.toast("分析完成!", icon="✅", duration=1)
@@ -205,6 +217,7 @@ else:
                     img_nce = img_base + "-nce.png"
                     img_sfma = img_base + "-sfma.png"
                     img_sla = img_base + "-sla.png"
+                    img_sla_high = img_base + "-sla-high.png"
                     img_tilt = img_base + "-tilt.png"
                     img_tilt_high = img_base + "-tilt-high.png"
 
@@ -221,6 +234,8 @@ else:
                             zf.write(img_sfma, os.path.basename(img_sfma))
                         if os.path.exists(img_sla):
                             zf.write(img_sla, os.path.basename(img_sla))
+                        if os.path.exists(img_sla_high):
+                            zf.write(img_sla_high, os.path.basename(img_sla_high))
                         if os.path.exists(img_tilt):
                             zf.write(img_tilt, os.path.basename(img_tilt))
                         if os.path.exists(img_tilt_high):
@@ -343,6 +358,24 @@ else:
                             )
                         else:
                             st.warning("未生成高局部角分布图")
+
+                    # 第四行：SLA超差区域
+                    col7, col8 = st.columns(2)
+
+                    with col7:
+                        st.subheader(f"SLA超差区域 (>{sla_threshold}nm)")
+                        if os.path.exists(img_sla_high):
+                            st.image(
+                                img_sla_high,
+                                caption=f"SLA超差区域 (>{sla_threshold}nm)",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.warning("未生成SLA超差区域图")
+
+                    with col8:
+                        # 占位，保持布局平衡
+                        pass
 
                     st.markdown("---")
 

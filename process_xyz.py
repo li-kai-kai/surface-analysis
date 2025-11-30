@@ -442,6 +442,47 @@ def plot_sla_heatmap(x, y, z_sla, metric_val, output_image_path):
     # print(f"Saved SLA heatmap to {output_image_path}")
 
 
+def plot_high_sla_heatmap(x, y, z_sla, threshold, output_image_path):
+    """生成大于特定阈值的SLA热力图"""
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap("jet")
+
+    # 将阈值从nm转换为m
+    threshold_m = threshold * 1e-9
+
+    # 取绝对值后与阈值比较
+    mask = (~np.isnan(z_sla)) & (np.abs(z_sla) > threshold_m)
+
+    if np.sum(mask) == 0:
+        # 如果没有超过阈值的点，生成一个空图或者提示图
+        plt.text(
+            0.5,
+            0.5,
+            f"No data > {threshold} nm",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=plt.gca().transAxes,
+        )
+    else:
+        # 使用 scatter 绘制散点，因为超过阈值的区域可能是不连续的
+        sc = plt.scatter(x[mask], y[mask], c=z_sla[mask] * 1e9, cmap=cmap, s=5)
+        cbar = plt.colorbar(sc)
+        cbar.set_label("nm")
+
+    r = np.max(np.sqrt(x**2 + y**2))
+    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
+    plt.gca().add_patch(circle)
+
+    plt.axis("equal")
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.title(f"SLA (大于{threshold}nm区域)")
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close()
+    # print(f"Saved high SLA heatmap to {output_image_path}")
+
+
 def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
     """生成去一阶面形后的热力图"""
     plt.figure(figsize=(8, 6))
@@ -572,6 +613,7 @@ def process_xyz(
     step_y=0.0005,
     slit_height=0.008,
     edge_clearance=0.05,
+    sla_threshold=50.0,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -584,6 +626,7 @@ def process_xyz(
         step_y: Y方向子口径尺寸,单位米 (默认: 0.0005m = 0.5mm)
         slit_height: 调平狭缝宽度,单位米 (默认: 0.008m = 8mm)
         edge_clearance: 边缘清除量,单位米 (默认: 0.0m = 0mm, 不清除边缘)
+        sla_threshold: SLA超差阈值,单位纳米 (默认: 50.0nm)
     """
     # print(f"Processing {input_path} -> {output_path}")
     # print(
@@ -809,6 +852,10 @@ def process_xyz(
                 if not np.isnan(z_sla[i]):
                     f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sla[i]:.15f}\n")
 
+        # SLA超差分析
+        high_sla_image_path = output_path.replace(".txt", "-sla-high.png")
+        plot_high_sla_heatmap(x_arr, y_arr, z_sla, sla_threshold, high_sla_image_path)
+
         # 5. 局部角分析
         tilt_urad = calculate_local_tilt(x_arr, y_arr, z_resid)
 
@@ -844,4 +891,4 @@ def process_xyz(
 
 
 if __name__ == "__main__":
-    process_xyz("005-avg.xyz", "005-avg-processed.txt")
+    process_xyz("example/005-avg.xyz", "output/005-avg-processed.txt")
