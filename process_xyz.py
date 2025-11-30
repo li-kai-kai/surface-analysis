@@ -131,6 +131,90 @@ def calculate_dynamic_sfma(
     return z_dynamic
 
 
+def calculate_sla(x, y, z, column_width=0.023):
+    """
+    计算SLA (Scanning Leveling Accuracy)
+    按列处理数据,每列宽度为23mm,移除每列的倾斜并累积残差
+
+    参数:
+        x, y, z: 数据点坐标和高度值
+        column_width: 列宽度,单位米 (默认: 0.023m = 23mm)
+    """
+
+    min_x, max_x = np.min(x), np.max(x)
+    min_y, max_y = np.min(y), np.max(y)
+
+    x_sorted = np.sort(np.unique(x))
+    y_sorted = np.sort(np.unique(y))
+    step_x = np.median(np.diff(x_sorted)) if len(x_sorted) > 1 else (max_x - min_x)
+    step_y = np.median(np.diff(y_sorted)) if len(y_sorted) > 1 else (max_y - min_y)
+
+    n_cols = int(round((max_x - min_x) / step_x)) + 1
+    n_rows = int(round((max_y - min_y) / step_y)) + 1
+
+    col_indices = np.round((x - min_x) / step_x).astype(int)
+    row_indices = np.round((y - min_y) / step_y).astype(int)
+
+    grid_z = np.full((n_rows, n_cols), np.nan)
+    grid_z[row_indices, col_indices] = z
+
+    grid_x = min_x + np.arange(n_cols) * step_x
+    grid_y = min_y + np.arange(n_rows) * step_y
+    GX, GY = np.meshgrid(grid_x, grid_y)
+
+    # 计算列宽度对应的像素数
+    col_px_w = int(round(column_width / step_x))
+
+    # 使用均值累积
+    layout_sum = np.zeros((n_rows, n_cols))
+    layout_count = np.zeros((n_rows, n_cols))
+
+    # 按列处理,每次处理一列(23mm宽度)
+    # 列之间不重叠,从左到右依次处理
+    for col_start_idx in range(0, n_cols, col_px_w):
+        col_end_idx = min(col_start_idx + col_px_w, n_cols)
+
+        if col_start_idx >= col_end_idx:
+            continue
+
+        # 提取当前列的数据
+        col_z = grid_z[:, col_start_idx:col_end_idx]
+        col_x = GX[:, col_start_idx:col_end_idx]
+        col_y = GY[:, col_start_idx:col_end_idx]
+
+        # 获取当前列所有有效数据点
+        mask = ~np.isnan(col_z)
+        if np.sum(mask) < 10:
+            continue
+
+        z_f = col_z[mask]
+        x_f = col_x[mask]
+        y_f = col_y[mask]
+
+        # 对整列数据拟合平面并移除倾斜
+        A = np.c_[x_f, y_f, np.ones(len(x_f))]
+        coeff, _, _, _ = np.linalg.lstsq(A, z_f, rcond=None)
+        a, b, c = coeff
+
+        z_fit = a * col_x + b * col_y + c
+        residual = col_z - z_fit
+
+        valid_res_mask = ~np.isnan(residual)
+        acc_sum_slice = layout_sum[:, col_start_idx:col_end_idx]
+        acc_count_slice = layout_count[:, col_start_idx:col_end_idx]
+
+        # 累积求和和计数
+        acc_sum_slice[valid_res_mask] += residual[valid_res_mask]
+        acc_count_slice[valid_res_mask] += 1
+
+    # 计算均值
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result_map = layout_sum / layout_count
+
+    z_sla = result_map[row_indices, col_indices]
+    return z_sla
+
+
 def calculate_local_tilt(x, y, z):
     """
     计算局部倾斜角度 (梯度幅值)
@@ -329,6 +413,33 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
     plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved SFMA heatmap to {output_image_path}")
+
+
+def plot_sla_heatmap(x, y, z_sla, metric_val, output_image_path):
+    """生成SLA热力图"""
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap("jet")
+
+    mask = ~np.isnan(z_sla)
+    if np.sum(mask) == 0:
+        return
+
+    cntr = plt.tricontourf(x[mask], y[mask], z_sla[mask], levels=100, cmap=cmap)
+    cbar = plt.colorbar(cntr)
+    cbar.formatter.set_powerlimits((0, 0))
+
+    r = np.max(np.sqrt(x**2 + y**2))
+    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
+    plt.gca().add_patch(circle)
+
+    plt.axis("equal")
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.title(f"SLA (Scanning Leveling Accuracy)\nm3s = {metric_val*1e9:.2f} nm")
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close()
+    # print(f"Saved SLA heatmap to {output_image_path}")
 
 
 def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
@@ -676,7 +787,29 @@ def process_xyz(
                 if not np.isnan(z_sfma[i]):
                     f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sfma[i]:.15f}\n")
 
-        # 4. 局部角分析
+        # 4. SLA分析 (Scanning Leveling Accuracy)
+        z_sla = calculate_sla(
+            x_arr,
+            y_arr,
+            z_resid,
+            column_width=0.023,  # 23mm列宽
+        )
+
+        valid_sla = z_sla[~np.isnan(z_sla)]
+        mean_sla = np.median(valid_sla)
+        std_sla = np.std(valid_sla)
+        sla_metric = mean_sla + 3 * std_sla
+        sla_image_path = output_path.replace(".txt", "-sla.png")
+        plot_sla_heatmap(x_arr, y_arr, z_sla, sla_metric, sla_image_path)
+
+        # 保存SLA map到txt文件
+        sla_txt_path = output_path.replace(".txt", "-sla.txt")
+        with open(sla_txt_path, "w") as f:
+            for i in range(len(x_arr)):
+                if not np.isnan(z_sla[i]):
+                    f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sla[i]:.15f}\n")
+
+        # 5. 局部角分析
         tilt_urad = calculate_local_tilt(x_arr, y_arr, z_resid)
 
         valid_tilt = tilt_urad[~np.isnan(tilt_urad)]
@@ -697,7 +830,7 @@ def process_xyz(
             tilt_image_path,
         )
 
-        # 5. 局部倾斜角度分析 (>12.5urad)
+        # 6. 局部倾斜角度分析 (>12.5urad)
         high_tilt_image_path = output_path.replace(".txt", "-tilt-high.png")
         plot_high_tilt_heatmap(x_arr, y_arr, tilt_urad, 12.5, high_tilt_image_path)
 
@@ -705,6 +838,7 @@ def process_xyz(
             "pv": pv,  # 保留两位小数
             "nce": nce_metric,
             "sfma": sfma_metric,
+            "sla": sla_metric,
             "tilt": tilt_metric,
         }
 

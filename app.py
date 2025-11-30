@@ -162,6 +162,7 @@ if uploaded_file is None or not analyze_button:
         - 去一阶面形
         - NCE面形
         - SFMA面形
+        - SLA面形 (Scanning Leveling Accuracy)
         - 局部角分布
         - 处理后的数据文件
         """
@@ -203,6 +204,7 @@ else:
                     img_tilt_removed = img_base + ".png"
                     img_nce = img_base + "-nce.png"
                     img_sfma = img_base + "-sfma.png"
+                    img_sla = img_base + "-sla.png"
                     img_tilt = img_base + "-tilt.png"
                     img_tilt_high = img_base + "-tilt-high.png"
 
@@ -217,6 +219,8 @@ else:
                             zf.write(img_nce, os.path.basename(img_nce))
                         if os.path.exists(img_sfma):
                             zf.write(img_sfma, os.path.basename(img_sfma))
+                        if os.path.exists(img_sla):
+                            zf.write(img_sla, os.path.basename(img_sla))
                         if os.path.exists(img_tilt):
                             zf.write(img_tilt, os.path.basename(img_tilt))
                         if os.path.exists(img_tilt_high):
@@ -247,7 +251,7 @@ else:
 
                     if metrics:
                         # 1. 展示指标值
-                        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                        m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
                         with m_col1:
                             st.metric("去一阶面形 PV", f"{metrics['pv']*1e6:.2f} μm")
                         with m_col2:
@@ -255,6 +259,8 @@ else:
                         with m_col3:
                             st.metric("SFMA (m+3σ)", f"{metrics['sfma']*1e9:.2f} nm")
                         with m_col4:
+                            st.metric("SLA (m+3σ)", f"{metrics['sla']*1e9:.2f} nm")
+                        with m_col5:
                             st.metric(
                                 "局部角分布 (m+3σ)", f"{metrics['tilt']:.2f} μrad"
                             )
@@ -312,10 +318,21 @@ else:
                         else:
                             st.warning("未生成局部角分布")
 
-                    # 第三行：局部角分布 (>12.5urad)
+                    # 第三行：SLA面形 和 局部角分布 (>12.5urad)
                     col5, col6 = st.columns(2)
 
                     with col5:
+                        st.subheader("SLA面形")
+                        if os.path.exists(img_sla):
+                            st.image(
+                                img_sla,
+                                caption="SLA面形 (Scanning Leveling Accuracy)",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.warning("未生成SLA面形")
+
+                    with col6:
                         st.subheader("局部角分布 (>12.5μrad)")
                         img_tilt_high = img_base + "-tilt-high.png"
                         if os.path.exists(img_tilt_high):
@@ -326,10 +343,6 @@ else:
                             )
                         else:
                             st.warning("未生成高局部角分布图")
-
-                    with col6:
-                        # 占位，保持布局平衡
-                        pass
 
                     st.markdown("---")
 
