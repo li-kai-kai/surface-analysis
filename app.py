@@ -131,6 +131,16 @@ with st.sidebar:
             step=0.1,
         )
 
+    # 边缘清除参数
+    edge_clearance = st.number_input(
+        "边缘清除量 (mm)",
+        min_value=0.0,
+        max_value=150.0,
+        value=0.0,
+        format="%.1f",
+        step=0.1,
+    )
+
     # 分析按钮
     analyze_button = st.button("开始分析", type="primary", use_container_width=True)
 
@@ -182,6 +192,7 @@ else:
                         step_x=sub_x * 0.001,  # mm -> m
                         step_y=sub_y * 0.001,  # mm -> m
                         slit_height=slit_height * 0.001,  # mm -> m
+                        edge_clearance=edge_clearance * 0.001,  # mm -> m
                     )
 
                     st.toast("分析完成!", icon="✅", duration=1)

@@ -460,6 +460,7 @@ def process_xyz(
     step_x=0.0034,
     step_y=0.0005,
     slit_height=0.008,
+    edge_clearance=0.05,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -471,6 +472,7 @@ def process_xyz(
         step_x: X方向子口径尺寸,单位米 (默认: 0.0034m = 3.4mm)
         step_y: Y方向子口径尺寸,单位米 (默认: 0.0005m = 0.5mm)
         slit_height: 调平狭缝宽度,单位米 (默认: 0.008m = 8mm)
+        edge_clearance: 边缘清除量,单位米 (默认: 0.0m = 0mm, 不清除边缘)
     """
     # print(f"Processing {input_path} -> {output_path}")
     # print(
@@ -566,6 +568,34 @@ def process_xyz(
 
     # print(f"Binned {data_count} data points into {len(bins)} bins.")
 
+    # 应用边缘清除
+    if edge_clearance > 0:
+        # 计算数据的径向范围
+        all_x = [START_X + k[0] * STEP_X for k in bins.keys()]
+        all_y = [START_Y + k[1] * STEP_Y for k in bins.keys()]
+        max_radius = max(np.sqrt(np.array(all_x) ** 2 + np.array(all_y) ** 2))
+
+        # 将原始半径四舍五入到毫米级别，然后减去清除量
+        original_radius_mm = round(max_radius * 1000)  # 转换为mm并四舍五入
+        clearance_radius_mm = original_radius_mm - (edge_clearance * 1000)  # 减去清除量
+        clearance_radius = clearance_radius_mm / 1000  # 转换回米
+
+        # 过滤掉边缘区域的数据点
+        filtered_bins = {}
+        for key, value in bins.items():
+            grid_x = START_X + key[0] * STEP_X
+            grid_y = START_Y + key[1] * STEP_Y
+            radius = np.sqrt(grid_x**2 + grid_y**2)
+            if radius <= clearance_radius:
+                filtered_bins[key] = value
+
+        bins = filtered_bins
+        print(f"原始最大半径: {original_radius_mm:.0f}mm")
+        print(f"清除后半径: {clearance_radius_mm:.0f}mm")
+        print(
+            f"After edge clearance ({edge_clearance*1000:.1f}mm): {len(bins)} bins remaining."
+        )
+
     # 输出处理后的数据
     plot_x, plot_y, plot_z = [], [], []
     sorted_keys = sorted(bins.keys(), key=lambda k: (k[1], k[0]))
@@ -638,6 +668,13 @@ def process_xyz(
         sfma_metric = np.median(filtered_sfma) + 3 * std_sfma
         sfma_image_path = output_path.replace(".txt", "-sfma.png")
         plot_sfma_heatmap(x_arr, y_arr, z_sfma, sfma_metric, sfma_image_path)
+
+        # 保存SFMA map到txt文件
+        sfma_txt_path = output_path.replace(".txt", "-sfma.txt")
+        with open(sfma_txt_path, "w") as f:
+            for i in range(len(x_arr)):
+                if not np.isnan(z_sfma[i]):
+                    f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sfma[i]:.15f}\n")
 
         # 4. 局部角分析
         tilt_urad = calculate_local_tilt(x_arr, y_arr, z_resid)
