@@ -39,7 +39,7 @@ st.markdown(
 [data-testid="stSidebar"] h3 {
     font-size: 13px !important;
     font-weight: 600 !important;
-    margin-top: 0.8rem !important;
+    margin-top: 0.4rem !important;
     margin-bottom: 0.4rem !important;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -87,9 +87,6 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # 分析参数区域
-    st.markdown("### 分析参数")
-
     slit_height = st.number_input(
         "调平狭缝宽度 (mm)",
         min_value=1.0,
@@ -110,11 +107,11 @@ with st.sidebar:
     )
 
     # 子口径参数
-    st.markdown("### 子口径尺寸")
+    # st.markdown("#### 子口径尺寸")
     col1, col2 = st.columns(2)
     with col1:
         sub_x = st.number_input(
-            "X方向 (mm)",
+            "X方向口径 (mm)",
             min_value=0.1,
             max_value=10.0,
             value=3.4,
@@ -123,7 +120,7 @@ with st.sidebar:
         )
     with col2:
         sub_y = st.number_input(
-            "Y方向 (mm)",
+            "Y方向口径 (mm)",
             min_value=0.01,
             max_value=5.0,
             value=0.5,
@@ -141,23 +138,11 @@ with st.sidebar:
         step=0.1,
     )
 
-    # SLA阈值参数
-    sla_threshold = st.number_input(
-        "SLA超差阈值 (nm)",
-        min_value=1.0,
-        max_value=200.0,
-        value=50.0,
-        format="%.1f",
-        step=1.0,
-        help="SLA超差阈值，用于标识超过该值的区域",
-    )
-
     # 分析按钮
     analyze_button = st.button("开始分析", type="primary", use_container_width=True)
 
 # 主界面
 if uploaded_file is None or not analyze_button:
-
     # 显示使用说明
     with st.expander("📖 使用说明", expanded=True):
         st.markdown(
@@ -170,10 +155,7 @@ if uploaded_file is None or not analyze_button:
         5. 下载生成的结果文件
         
         ### 输出结果:
-        - 去一阶面形
-        - NCE面形
         - SFMA面形
-        - SLA面形 (Scanning Leveling Accuracy)
         - 局部角分布
         - 处理后的数据文件
         """
@@ -205,7 +187,6 @@ else:
                         step_y=sub_y * 0.001,  # mm -> m
                         slit_height=slit_height * 0.001,  # mm -> m
                         edge_clearance=edge_clearance * 0.001,  # mm -> m
-                        sla_threshold=sla_threshold,  # nm
                     )
 
                     st.toast("分析完成!", icon="✅", duration=1)
@@ -213,29 +194,15 @@ else:
                     # 显示结果
                     # 图片路径
                     img_base = output_path.replace(".txt", "")
-                    img_tilt_removed = img_base + ".png"
-                    img_nce = img_base + "-nce.png"
                     img_sfma = img_base + "-sfma.png"
-                    img_sla = img_base + "-sla.png"
-                    img_sla_high = img_base + "-sla-high.png"
                     img_tilt = img_base + "-tilt.png"
                     img_tilt_high = img_base + "-tilt-high.png"
 
                     # 准备所有图像的ZIP文件
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, "w") as zf:
-                        if os.path.exists(img_tilt_removed):
-                            zf.write(
-                                img_tilt_removed, os.path.basename(img_tilt_removed)
-                            )
-                        if os.path.exists(img_nce):
-                            zf.write(img_nce, os.path.basename(img_nce))
                         if os.path.exists(img_sfma):
                             zf.write(img_sfma, os.path.basename(img_sfma))
-                        if os.path.exists(img_sla):
-                            zf.write(img_sla, os.path.basename(img_sla))
-                        if os.path.exists(img_sla_high):
-                            zf.write(img_sla_high, os.path.basename(img_sla_high))
                         if os.path.exists(img_tilt):
                             zf.write(img_tilt, os.path.basename(img_tilt))
                         if os.path.exists(img_tilt_high):
@@ -266,16 +233,10 @@ else:
 
                     if metrics:
                         # 1. 展示指标值
-                        m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+                        m_col1, m_col2 = st.columns(2)
                         with m_col1:
-                            st.metric("去一阶面形 PV", f"{metrics['pv']*1e6:.2f} μm")
+                            st.metric("SFMA (m+3σ)", f"{metrics['sfma'] * 1e9:.2f} nm")
                         with m_col2:
-                            st.metric("NCE (3σ)", f"{metrics['nce']*1e9:.2f} nm")
-                        with m_col3:
-                            st.metric("SFMA (m+3σ)", f"{metrics['sfma']*1e9:.2f} nm")
-                        with m_col4:
-                            st.metric("SLA (m+3σ)", f"{metrics['sla']*1e9:.2f} nm")
-                        with m_col5:
                             st.metric(
                                 "局部角分布 (m+3σ)", f"{metrics['tilt']:.2f} μrad"
                             )
@@ -283,35 +244,10 @@ else:
                         st.markdown("---")
 
                     # 3. 展示图表
-                    # 第一行：去一阶面形 和 NCE面形
+                    # 第一行：SFMA面形 和 局部角分布
                     col1, col2 = st.columns(2)
 
                     with col1:
-                        st.subheader("去一阶面形")
-                        if os.path.exists(img_tilt_removed):
-                            st.image(
-                                img_tilt_removed,
-                                caption="去一阶面形 (PV值)",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.warning("未生成去一阶面形图")
-
-                    with col2:
-                        st.subheader("NCE面形")
-                        if os.path.exists(img_nce):
-                            st.image(
-                                img_nce,
-                                caption="NCE面形 (96场布局)",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.warning("未生成NCE面形")
-
-                    # 第二行：SFMA面形 和 局部角分布
-                    col3, col4 = st.columns(2)
-
-                    with col3:
                         st.subheader("SFMA面形")
                         if os.path.exists(img_sfma):
                             st.image(
@@ -322,7 +258,7 @@ else:
                         else:
                             st.warning("未生成SFMA面形")
 
-                    with col4:
+                    with col2:
                         st.subheader("局部角分布")
                         if os.path.exists(img_tilt):
                             st.image(
@@ -333,21 +269,10 @@ else:
                         else:
                             st.warning("未生成局部角分布")
 
-                    # 第三行：SLA面形 和 局部角分布 (>12.5urad)
-                    col5, col6 = st.columns(2)
+                    # 第二行：局部角分布 (>12.5μrad)
+                    col3, col4 = st.columns(2)
 
-                    with col5:
-                        st.subheader("SLA面形")
-                        if os.path.exists(img_sla):
-                            st.image(
-                                img_sla,
-                                caption="SLA面形 (Scanning Leveling Accuracy)",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.warning("未生成SLA面形")
-
-                    with col6:
+                    with col3:
                         st.subheader("局部角分布 (>12.5μrad)")
                         img_tilt_high = img_base + "-tilt-high.png"
                         if os.path.exists(img_tilt_high):
@@ -359,41 +284,9 @@ else:
                         else:
                             st.warning("未生成高局部角分布图")
 
-                    # 第四行：SLA超差区域
-                    col7, col8 = st.columns(2)
-
-                    with col7:
-                        st.subheader(f"SLA超差区域 (>{sla_threshold}nm)")
-                        if os.path.exists(img_sla_high):
-                            st.image(
-                                img_sla_high,
-                                caption=f"SLA超差区域 (>{sla_threshold}nm)",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.warning("未生成SLA超差区域图")
-
-                    with col8:
+                    with col4:
                         # 占位，保持布局平衡
                         pass
-
-                    st.markdown("---")
-
-                    # 4. 数据下载 (底部保留一个备用)
-                    # if os.path.exists(output_path):
-                    #     # 下载按钮
-                    #     with open(output_path, "rb") as f:
-                    #         st.download_button(
-                    #             "📥 下载预处理数据文件",
-                    #             f,
-                    #             file_name=output_filename,
-                    #             mime="text/plain",
-                    #             key="btn_data_bottom",
-                    #             type="secondary",
-                    #             use_container_width=True,
-                    #         )
-                    # else:
-                    #     st.warning("未生成数据文件")
 
                 except Exception as e:
                     st.error(f"❌ 分析过程中出现错误: {str(e)}")

@@ -131,90 +131,6 @@ def calculate_dynamic_sfma(
     return z_dynamic
 
 
-def calculate_sla(x, y, z, column_width=0.023):
-    """
-    计算SLA (Scanning Leveling Accuracy)
-    按列处理数据,每列宽度为23mm,移除每列的倾斜并累积残差
-
-    参数:
-        x, y, z: 数据点坐标和高度值
-        column_width: 列宽度,单位米 (默认: 0.023m = 23mm)
-    """
-
-    min_x, max_x = np.min(x), np.max(x)
-    min_y, max_y = np.min(y), np.max(y)
-
-    x_sorted = np.sort(np.unique(x))
-    y_sorted = np.sort(np.unique(y))
-    step_x = np.median(np.diff(x_sorted)) if len(x_sorted) > 1 else (max_x - min_x)
-    step_y = np.median(np.diff(y_sorted)) if len(y_sorted) > 1 else (max_y - min_y)
-
-    n_cols = int(round((max_x - min_x) / step_x)) + 1
-    n_rows = int(round((max_y - min_y) / step_y)) + 1
-
-    col_indices = np.round((x - min_x) / step_x).astype(int)
-    row_indices = np.round((y - min_y) / step_y).astype(int)
-
-    grid_z = np.full((n_rows, n_cols), np.nan)
-    grid_z[row_indices, col_indices] = z
-
-    grid_x = min_x + np.arange(n_cols) * step_x
-    grid_y = min_y + np.arange(n_rows) * step_y
-    GX, GY = np.meshgrid(grid_x, grid_y)
-
-    # 计算列宽度对应的像素数
-    col_px_w = int(round(column_width / step_x))
-
-    # 使用均值累积
-    layout_sum = np.zeros((n_rows, n_cols))
-    layout_count = np.zeros((n_rows, n_cols))
-
-    # 按列处理,每次处理一列(23mm宽度)
-    # 列之间不重叠,从左到右依次处理
-    for col_start_idx in range(0, n_cols, col_px_w):
-        col_end_idx = min(col_start_idx + col_px_w, n_cols)
-
-        if col_start_idx >= col_end_idx:
-            continue
-
-        # 提取当前列的数据
-        col_z = grid_z[:, col_start_idx:col_end_idx]
-        col_x = GX[:, col_start_idx:col_end_idx]
-        col_y = GY[:, col_start_idx:col_end_idx]
-
-        # 获取当前列所有有效数据点
-        mask = ~np.isnan(col_z)
-        if np.sum(mask) < 10:
-            continue
-
-        z_f = col_z[mask]
-        x_f = col_x[mask]
-        y_f = col_y[mask]
-
-        # 对整列数据拟合平面并移除倾斜
-        A = np.c_[x_f, y_f, np.ones(len(x_f))]
-        coeff, _, _, _ = np.linalg.lstsq(A, z_f, rcond=None)
-        a, b, c = coeff
-
-        z_fit = a * col_x + b * col_y + c
-        residual = col_z - z_fit
-
-        valid_res_mask = ~np.isnan(residual)
-        acc_sum_slice = layout_sum[:, col_start_idx:col_end_idx]
-        acc_count_slice = layout_count[:, col_start_idx:col_end_idx]
-
-        # 累积求和和计数
-        acc_sum_slice[valid_res_mask] += residual[valid_res_mask]
-        acc_count_slice[valid_res_mask] += 1
-
-    # 计算均值
-    with np.errstate(divide="ignore", invalid="ignore"):
-        result_map = layout_sum / layout_count
-
-    z_sla = result_map[row_indices, col_indices]
-    return z_sla
-
-
 def calculate_local_tilt(x, y, z):
     """
     计算局部倾斜角度 (梯度幅值)
@@ -408,79 +324,11 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
     plt.axis("equal")
     plt.xlabel("X (m)")
     plt.ylabel("Y (m)")
-    plt.title(f"SFMA\nm3s = {metric_val*1e9:.2f} nm")
+    plt.title(f"SFMA\nm3s = {metric_val * 1e9:.2f} nm")
 
     plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved SFMA heatmap to {output_image_path}")
-
-
-def plot_sla_heatmap(x, y, z_sla, metric_val, output_image_path):
-    """生成SLA热力图"""
-    plt.figure(figsize=(8, 6))
-    cmap = plt.get_cmap("jet")
-
-    mask = ~np.isnan(z_sla)
-    if np.sum(mask) == 0:
-        return
-
-    cntr = plt.tricontourf(x[mask], y[mask], z_sla[mask], levels=100, cmap=cmap)
-    cbar = plt.colorbar(cntr)
-    cbar.formatter.set_powerlimits((0, 0))
-
-    r = np.max(np.sqrt(x**2 + y**2))
-    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
-
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"SLA (Scanning Leveling Accuracy)\nm3s = {metric_val*1e9:.2f} nm")
-
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
-    # print(f"Saved SLA heatmap to {output_image_path}")
-
-
-def plot_high_sla_heatmap(x, y, z_sla, threshold, output_image_path):
-    """生成大于特定阈值的SLA热力图"""
-    plt.figure(figsize=(8, 6))
-    cmap = plt.get_cmap("jet")
-
-    # 将阈值从nm转换为m
-    threshold_m = threshold * 1e-9
-
-    # 取绝对值后与阈值比较
-    mask = (~np.isnan(z_sla)) & (np.abs(z_sla) > threshold_m)
-
-    if np.sum(mask) == 0:
-        # 如果没有超过阈值的点，生成一个空图或者提示图
-        plt.text(
-            0.5,
-            0.5,
-            f"No data > {threshold} nm",
-            horizontalalignment="center",
-            verticalalignment="center",
-            transform=plt.gca().transAxes,
-        )
-    else:
-        # 使用 scatter 绘制散点，因为超过阈值的区域可能是不连续的
-        sc = plt.scatter(x[mask], y[mask], c=z_sla[mask] * 1e9, cmap=cmap, s=5)
-        cbar = plt.colorbar(sc)
-        cbar.set_label("nm")
-
-    r = np.max(np.sqrt(x**2 + y**2))
-    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
-
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"SLA (大于{threshold}nm区域)")
-
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
-    # print(f"Saved high SLA heatmap to {output_image_path}")
 
 
 def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
@@ -498,7 +346,7 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
     plt.axis("equal")
     plt.xlabel("X (m)")
     plt.ylabel("Y (m)")
-    plt.title(f"去一阶面形\nPV = {pv*1e6:.2f} um")
+    plt.title(f"去一阶面形\nPV = {pv * 1e6:.2f} um")
 
     plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
@@ -598,7 +446,7 @@ def plot_nce_heatmap(x, y, z_nce, std_val, grid_x, grid_y, output_image_path):
     plt.axis("equal")
     plt.xlabel("X (m)")
     plt.ylabel("Y (m)")
-    plt.title(f"NCE面形（96场布局）\n3std = {3*std_val*1e9:.2f} nm")
+    plt.title(f"NCE面形（96场布局）\n3std = {3 * std_val * 1e9:.2f} nm")
 
     plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
@@ -613,7 +461,6 @@ def process_xyz(
     step_y=0.0005,
     slit_height=0.008,
     edge_clearance=0.05,
-    sla_threshold=50.0,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -626,7 +473,6 @@ def process_xyz(
         step_y: Y方向子口径尺寸,单位米 (默认: 0.0005m = 0.5mm)
         slit_height: 调平狭缝宽度,单位米 (默认: 0.008m = 8mm)
         edge_clearance: 边缘清除量,单位米 (默认: 0.0m = 0mm, 不清除边缘)
-        sla_threshold: SLA超差阈值,单位纳米 (默认: 50.0nm)
     """
     # print(f"Processing {input_path} -> {output_path}")
     # print(
@@ -747,7 +593,7 @@ def process_xyz(
         print(f"原始最大半径: {original_radius_mm:.0f}mm")
         print(f"清除后半径: {clearance_radius_mm:.0f}mm")
         print(
-            f"After edge clearance ({edge_clearance*1000:.1f}mm): {len(bins)} bins remaining."
+            f"After edge clearance ({edge_clearance * 1000:.1f}mm): {len(bins)} bins remaining."
         )
 
     # 输出处理后的数据
@@ -774,38 +620,35 @@ def process_xyz(
         y_arr = np.array(plot_y)
         z_arr = np.array(plot_z)
 
-        # 1. 去一阶面形
-        z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
+        # 计算z_resid用于SFMA和Tilt分析
+        z_resid = remove_tilt(x_arr, y_arr, z_arr)
 
-        image_path = output_path.replace(".txt", ".png")
-        plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path)
+        # # 1. 去一阶面形 (已禁用)
+        # z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
+        # image_path = output_path.replace(".txt", ".png")
+        # plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path)
 
-        # 2. NCE分析
-        z_nce, _, _ = calculate_nce(
-            x_arr, y_arr, z_arr, field_size_x=0.026, field_size_y=0.008
-        )
+        # # 2. NCE分析 (已禁用)
+        # z_nce, _, _ = calculate_nce(
+        #     x_arr, y_arr, z_arr, field_size_x=0.026, field_size_y=0.008
+        # )
+        # valid_nce = z_nce[~np.isnan(z_nce)]
+        # mean_nce = np.median(valid_nce)
+        # std_raw = np.std(valid_nce)
+        # mask_sigma = np.abs(valid_nce - mean_nce) <= 3 * std_raw
+        # filtered_nce = valid_nce[mask_sigma]
+        # std_nce = np.std(filtered_nce)
+        # nce_metric = mean_nce + 3 * std_nce
+        # disp_field_x = 0.026
+        # disp_field_y = 0.033
+        # n_disp_cols = int(np.ceil(np.max(np.abs(x_arr)) / disp_field_x))
+        # n_disp_rows = int(np.ceil(np.max(np.abs(y_arr)) / disp_field_y))
+        # gx = np.arange(-n_disp_cols, n_disp_cols + 1) * disp_field_x
+        # gy = np.arange(-n_disp_rows, n_disp_rows + 1) * disp_field_y
+        # nce_image_path = output_path.replace(".txt", "-nce.png")
+        # plot_nce_heatmap(x_arr, y_arr, z_nce, std_nce, gx, gy, nce_image_path)
 
-        valid_nce = z_nce[~np.isnan(z_nce)]
-        mean_nce = np.median(valid_nce)
-        std_raw = np.std(valid_nce)
-
-        mask_sigma = np.abs(valid_nce - mean_nce) <= 3 * std_raw
-        filtered_nce = valid_nce[mask_sigma]
-        std_nce = np.std(filtered_nce)
-        nce_metric = mean_nce + 3 * std_nce
-
-        disp_field_x = 0.026
-        disp_field_y = 0.033
-        n_disp_cols = int(np.ceil(np.max(np.abs(x_arr)) / disp_field_x))
-        n_disp_rows = int(np.ceil(np.max(np.abs(y_arr)) / disp_field_y))
-
-        gx = np.arange(-n_disp_cols, n_disp_cols + 1) * disp_field_x
-        gy = np.arange(-n_disp_rows, n_disp_rows + 1) * disp_field_y
-
-        nce_image_path = output_path.replace(".txt", "-nce.png")
-        plot_nce_heatmap(x_arr, y_arr, z_nce, std_nce, gx, gy, nce_image_path)
-
-        # 3. SFMA分析
+        # 1. SFMA分析
         z_sfma = calculate_dynamic_sfma(
             x_arr,
             y_arr,
@@ -830,33 +673,7 @@ def process_xyz(
                 if not np.isnan(z_sfma[i]):
                     f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sfma[i]:.15f}\n")
 
-        # 4. SLA分析 (Scanning Leveling Accuracy)
-        z_sla = calculate_sla(
-            x_arr,
-            y_arr,
-            z_resid,
-            column_width=0.023,  # 23mm列宽
-        )
-
-        valid_sla = z_sla[~np.isnan(z_sla)]
-        mean_sla = np.median(valid_sla)
-        std_sla = np.std(valid_sla)
-        sla_metric = mean_sla + 3 * std_sla
-        sla_image_path = output_path.replace(".txt", "-sla.png")
-        plot_sla_heatmap(x_arr, y_arr, z_sla, sla_metric, sla_image_path)
-
-        # 保存SLA map到txt文件
-        sla_txt_path = output_path.replace(".txt", "-sla.txt")
-        with open(sla_txt_path, "w") as f:
-            for i in range(len(x_arr)):
-                if not np.isnan(z_sla[i]):
-                    f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {z_sla[i]:.15f}\n")
-
-        # SLA超差分析
-        high_sla_image_path = output_path.replace(".txt", "-sla-high.png")
-        plot_high_sla_heatmap(x_arr, y_arr, z_sla, sla_threshold, high_sla_image_path)
-
-        # 5. 局部角分析
+        # 2. 局部角分析
         tilt_urad = calculate_local_tilt(x_arr, y_arr, z_resid)
 
         valid_tilt = tilt_urad[~np.isnan(tilt_urad)]
@@ -877,15 +694,14 @@ def process_xyz(
             tilt_image_path,
         )
 
-        # 6. 局部倾斜角度分析 (>12.5urad)
+        # 3. 局部倾斜角度分析 (>12.5urad)
         high_tilt_image_path = output_path.replace(".txt", "-tilt-high.png")
         plot_high_tilt_heatmap(x_arr, y_arr, tilt_urad, 12.5, high_tilt_image_path)
 
         return {
-            "pv": pv,  # 保留两位小数
-            "nce": nce_metric,
+            # "pv": pv,  # 已禁用
+            # "nce": nce_metric,  # 已禁用
             "sfma": sfma_metric,
-            "sla": sla_metric,
             "tilt": tilt_metric,
         }
 
