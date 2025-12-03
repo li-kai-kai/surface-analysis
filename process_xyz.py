@@ -373,6 +373,44 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
     # print(f"Saved SFMA heatmap to {output_image_path}")
 
 
+def plot_sfma_high_heatmap(x, y, z_sfma, threshold, output_image_path):
+    """生成大于特定阈值的SFMA热力图"""
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap("jet")
+
+    # threshold is in meters, convert to nm for display comparison if needed,
+    # but here we compare in meters as z_sfma is in meters.
+    # threshold passed in is in meters.
+
+    mask = (~np.isnan(z_sfma)) & (np.abs(z_sfma) > threshold)
+
+    if np.sum(mask) == 0:
+        plt.text(
+            0.5,
+            0.5,
+            f"No data > {threshold * 1e9:.1f} nm",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=plt.gca().transAxes,
+        )
+    else:
+        sc = plt.scatter(x[mask], y[mask], c=z_sfma[mask], cmap=cmap, s=5)
+        cbar = plt.colorbar(sc)
+        cbar.formatter.set_powerlimits((0, 0))
+
+    r = np.max(np.sqrt(x**2 + y**2))
+    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
+    plt.gca().add_patch(circle)
+
+    plt.axis("equal")
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.title(f"SFMA (> {threshold * 1e9:.1f} nm)")
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close()
+
+
 def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
     """生成去一阶面形后的热力图"""
     plt.figure(figsize=(8, 6))
@@ -503,6 +541,8 @@ def process_xyz(
     step_y=0.0005,
     slit_height=0.008,
     edge_clearance=0.05,
+    sfma_threshold=7.5e-9,
+    tilt_threshold=3e-6,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -515,6 +555,8 @@ def process_xyz(
         step_y: Y方向子口径尺寸,单位米 (默认: 0.0005m = 0.5mm)
         slit_height: 调平狭缝宽度,单位米 (默认: 0.008m = 8mm)
         edge_clearance: 边缘清除量,单位米 (默认: 0.0m = 0mm, 不清除边缘)
+        sfma_threshold: SFMA阈值,单位米 (默认: 7.5nm)
+        tilt_threshold: 局部倾斜阈值,单位弧度 (默认: 3urad)
     """
     # print(f"Processing {input_path} -> {output_path}")
     # print(
@@ -708,6 +750,12 @@ def process_xyz(
         sfma_image_path = output_path.replace(".txt", "-sfma.png")
         plot_sfma_heatmap(x_arr, y_arr, z_sfma, sfma_metric, sfma_image_path)
 
+        # 1.1 SFMA 高阈值分析
+        sfma_high_image_path = output_path.replace(".txt", "-sfma-high.png")
+        plot_sfma_high_heatmap(
+            x_arr, y_arr, z_sfma, sfma_threshold, sfma_high_image_path
+        )
+
         # 保存SFMA map到txt文件
         sfma_txt_path = output_path.replace(".txt", "-sfma.txt")
         with open(sfma_txt_path, "w") as f:
@@ -736,9 +784,23 @@ def process_xyz(
             tilt_image_path,
         )
 
-        # 3. 局部倾斜角度分析 (>12.5urad)
+        # 保存Local Tilt map到txt文件
+        tilt_txt_path = output_path.replace(".txt", "-tilt.txt")
+        with open(tilt_txt_path, "w") as f:
+            for i in range(len(x_arr)):
+                if not np.isnan(tilt_urad[i]):
+                    f.write(f"{x_arr[i]:.15f} {y_arr[i]:.15f} {tilt_urad[i]:.15f}\n")
+
+        # 3. 局部倾斜角度分析 (>阈值)
         high_tilt_image_path = output_path.replace(".txt", "-tilt-high.png")
-        plot_high_tilt_heatmap(x_arr, y_arr, tilt_urad, 12.5, high_tilt_image_path)
+        # tilt_threshold is in radians, convert to urad for display if needed inside function?
+        # plot_high_tilt_heatmap expects threshold in urad (based on previous hardcoded 12.5)
+        # Wait, let's check plot_high_tilt_heatmap implementation.
+        # It takes tilt_urad and threshold. tilt_urad is in urad.
+        # So we need to pass threshold in urad.
+        plot_high_tilt_heatmap(
+            x_arr, y_arr, tilt_urad, tilt_threshold * 1e6, high_tilt_image_path
+        )
 
         return {
             # "pv": pv,  # 已禁用
