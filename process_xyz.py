@@ -200,17 +200,39 @@ def calculate_local_tilt(x, y, z):
             ) and not is_corner
 
             if is_corner:
+                # 角点使用局部平面拟合
                 sx, sy = fit_local_plane(i, j, grid_z, step_x, step_y)
                 slope_x[i, j] = sx
                 slope_y[i, j] = sy
             elif is_edge:
+                # 边缘点使用双侧差分(如果可能),否则使用单侧差分
+                # X方向
                 if is_left_edge:
-                    if not np.isnan(grid_z[i, j + 1]):
+                    if (
+                        j + 2 < n_cols
+                        and not np.isnan(grid_z[i, j + 1])
+                        and not np.isnan(grid_z[i, j + 2])
+                    ):
+                        # 使用前向二阶差分
+                        slope_x[i, j] = (
+                            -3 * grid_z[i, j] + 4 * grid_z[i, j + 1] - grid_z[i, j + 2]
+                        ) / (2 * step_x)
+                    elif not np.isnan(grid_z[i, j + 1]):
                         slope_x[i, j] = (grid_z[i, j + 1] - grid_z[i, j]) / step_x
                 elif is_right_edge:
-                    if not np.isnan(grid_z[i, j - 1]):
+                    if (
+                        j - 2 >= 0
+                        and not np.isnan(grid_z[i, j - 1])
+                        and not np.isnan(grid_z[i, j - 2])
+                    ):
+                        # 使用后向二阶差分
+                        slope_x[i, j] = (
+                            3 * grid_z[i, j] - 4 * grid_z[i, j - 1] + grid_z[i, j - 2]
+                        ) / (2 * step_x)
+                    elif not np.isnan(grid_z[i, j - 1]):
                         slope_x[i, j] = (grid_z[i, j] - grid_z[i, j - 1]) / step_x
                 else:
+                    # 顶部或底部边缘,X方向可以用中心差分
                     if not np.isnan(grid_z[i, j + 1]) and not np.isnan(
                         grid_z[i, j - 1]
                     ):
@@ -218,13 +240,33 @@ def calculate_local_tilt(x, y, z):
                             2 * step_x
                         )
 
+                # Y方向
                 if is_top_edge:
-                    if not np.isnan(grid_z[i + 1, j]):
+                    if (
+                        i + 2 < n_rows
+                        and not np.isnan(grid_z[i + 1, j])
+                        and not np.isnan(grid_z[i + 2, j])
+                    ):
+                        # 使用前向二阶差分
+                        slope_y[i, j] = (
+                            -3 * grid_z[i, j] + 4 * grid_z[i + 1, j] - grid_z[i + 2, j]
+                        ) / (2 * step_y)
+                    elif not np.isnan(grid_z[i + 1, j]):
                         slope_y[i, j] = (grid_z[i + 1, j] - grid_z[i, j]) / step_y
                 elif is_bottom_edge:
-                    if not np.isnan(grid_z[i - 1, j]):
+                    if (
+                        i - 2 >= 0
+                        and not np.isnan(grid_z[i - 1, j])
+                        and not np.isnan(grid_z[i - 2, j])
+                    ):
+                        # 使用后向二阶差分
+                        slope_y[i, j] = (
+                            3 * grid_z[i, j] - 4 * grid_z[i - 1, j] + grid_z[i - 2, j]
+                        ) / (2 * step_y)
+                    elif not np.isnan(grid_z[i - 1, j]):
                         slope_y[i, j] = (grid_z[i, j] - grid_z[i - 1, j]) / step_y
                 else:
+                    # 左侧或右侧边缘,Y方向可以用中心差分
                     if not np.isnan(grid_z[i + 1, j]) and not np.isnan(
                         grid_z[i - 1, j]
                     ):
@@ -232,10 +274,10 @@ def calculate_local_tilt(x, y, z):
                             2 * step_y
                         )
             else:
-                if not np.isnan(grid_z[i, j + 1]) and not np.isnan(grid_z[i, j - 1]):
-                    slope_x[i, j] = (grid_z[i, j + 1] - grid_z[i, j - 1]) / (2 * step_x)
-                if not np.isnan(grid_z[i + 1, j]) and not np.isnan(grid_z[i - 1, j]):
-                    slope_y[i, j] = (grid_z[i + 1, j] - grid_z[i - 1, j]) / (2 * step_y)
+                # 内部点使用局部平面拟合
+                sx, sy = fit_local_plane(i, j, grid_z, step_x, step_y)
+                slope_x[i, j] = sx
+                slope_y[i, j] = sy
 
     slope_x_urad = slope_x * 1e6
     slope_y_urad = slope_y * 1e6
