@@ -40,8 +40,8 @@ def calculate_dynamic_sfma(
     参数:
         x, y, z: 数据点坐标和高度值
         slit_w, slit_h: 狭缝的宽度和高度,单位米
-        slit_step_x: slit在X方向的移动步长,单位米 (默认: 0.026m = 26mm)
-        slit_step_y: slit在Y方向的移动步长,单位米 (默认: 0.0001m = 1mm)
+        slit_step_x: slit在X方向的移动步长,单位米 (默认: 0.013m = 13mm)
+        slit_step_y: slit在Y方向的移动步长,单位米 (默认: 0.001m = 1mm)
     """
 
     min_x, max_x = np.min(x), np.max(x)
@@ -67,8 +67,8 @@ def calculate_dynamic_sfma(
 
     slit_px_w = int(round(slit_w / step_x))
     slit_px_h = int(round(slit_h / step_y))
-    slit_step_px_x = int(round(slit_step_x / step_x))  # X方向移动步长(像素)
-    slit_step_px_y = int(round(slit_step_y / step_y))  # Y方向移动步长(像素)
+    slit_step_px_x = max(1, int(round(slit_step_x / step_x)))  # X方向移动步长(像素)
+    slit_step_px_y = max(1, int(round(slit_step_y / step_y)))  # Y方向移动步长(像素)
 
     # 使用均值累积
     layout_sum = np.zeros((n_rows, n_cols))
@@ -568,10 +568,13 @@ def process_xyz(
     STEP_Y = step_y
 
     # 第一遍: 读取数据确定中心和边界
-    # print("First pass: Reading data to determine center and bounds...")
-
-    with open(input_path, "r") as f:
-        lines = f.readlines()
+    try:
+        with open(input_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        # 如果 UTF-8 失败，尝试 GBK
+        with open(input_path, "r", encoding="gbk", errors="ignore") as f:
+            lines = f.readlines()
 
     # print(f"Read {len(lines)} lines from input.")
 
@@ -707,10 +710,10 @@ def process_xyz(
         # 计算z_resid用于SFMA和Tilt分析
         z_resid = remove_tilt(x_arr, y_arr, z_arr)
 
-        # # 1. 去一阶面形 (已禁用)
-        # z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
-        # image_path = output_path.replace(".txt", ".png")
-        # plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path)
+        # 1. 去一阶面形
+        z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
+        image_path = output_path.replace(".txt", ".png")
+        plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path)
 
         # # 2. NCE分析 (已禁用)
         # z_nce, _, _ = calculate_nce(
@@ -803,8 +806,7 @@ def process_xyz(
         )
 
         return {
-            # "pv": pv,  # 已禁用
-            # "nce": nce_metric,  # 已禁用
+            "pv": pv,
             "sfma": sfma_metric,
             "tilt": tilt_metric,
         }

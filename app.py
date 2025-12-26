@@ -109,7 +109,6 @@ with st.sidebar:
         sub_x = st.number_input(
             "X方向口径 (mm)",
             min_value=0.1,
-            max_value=10.0,
             value=3.4,
             format="%.1f",
             step=0.1,
@@ -118,7 +117,6 @@ with st.sidebar:
         sub_y = st.number_input(
             "Y方向口径 (mm)",
             min_value=0.01,
-            max_value=5.0,
             value=0.5,
             format="%.1f",
             step=0.1,
@@ -222,6 +220,7 @@ else:
                     img_sfma_high = img_base + "-sfma-high.png"
                     img_tilt = img_base + "-tilt.png"
                     img_tilt_high = img_base + "-tilt-high.png"
+                    img_pv = img_base + ".png"
 
                     # 保存结果到session state
                     st.session_state.analysis_results = {
@@ -231,6 +230,7 @@ else:
                         "output_filename": output_filename,
                         "file_name_suffix": file_name_suffix,
                         "img_base": img_base,
+                        "img_pv": img_pv,
                         "img_sfma": img_sfma,
                         "img_sfma_high": img_sfma_high,
                         "img_tilt": img_tilt,
@@ -261,6 +261,7 @@ else:
         img_sfma_high = results["img_sfma_high"]
         img_tilt = results["img_tilt"]
         img_tilt_high = results["img_tilt_high"]
+        img_pv = results["img_pv"]
         sfma_threshold_nm = results["sfma_threshold_nm"]
         tilt_threshold_urad = results["tilt_threshold_urad"]
 
@@ -275,6 +276,8 @@ else:
                 zf.write(img_tilt, os.path.basename(img_tilt))
             if os.path.exists(img_tilt_high):
                 zf.write(img_tilt_high, os.path.basename(img_tilt_high))
+            if os.path.exists(img_pv):
+                zf.write(img_pv, os.path.basename(img_pv))
 
         # 显示结果标题和下载按钮
         h_col1, h_col2, h_col3 = st.columns([6, 1, 1])
@@ -301,10 +304,12 @@ else:
 
         if metrics:
             # 1. 展示指标值
-            m_col1, m_col2 = st.columns(2)
+            m_col1, m_col2, m_col3 = st.columns(3)
             with m_col1:
-                st.metric("SFMA (m+3σ)", f"{metrics['sfma'] * 1e9:.2f} nm")
+                st.metric("去一阶面形 (PV)", f"{metrics['pv'] * 1e6:.2f} μm")
             with m_col2:
+                st.metric("SFMA (m+3σ)", f"{metrics['sfma'] * 1e9:.2f} nm")
+            with m_col3:
                 st.metric("局部角分布 (m+3σ)", f"{metrics['tilt']:.2f} μrad")
 
             st.markdown("---")
@@ -390,3 +395,14 @@ else:
                 )
             else:
                 st.warning("未生成高局部角分布图")
+
+        st.markdown("---")
+        st.subheader("去一阶面形")
+        if os.path.exists(img_pv):
+            st.image(
+                img_pv,
+                caption="去一阶面形 (PV)",
+                use_container_width=True,
+            )
+        else:
+            st.warning("未生成去一阶面形图")
