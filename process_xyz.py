@@ -7,6 +7,45 @@ rcParams["font.sans-serif"] = ["Arial Unicode MS", "SimHei", "sans-serif"]
 rcParams["axes.unicode_minus"] = False
 
 
+def detect_wafer_radius(x, y):
+    """
+    根据数据点的最大半径识别晶圆的标准尺寸
+
+    Args:
+        x, y: 数据点坐标数组
+
+    Returns:
+        wafer_radius: 晶圆标准半径（米）
+        wafer_size_inch: 晶圆尺寸（英寸）
+    """
+    # 计算数据点的最大半径
+    data_radius = np.max(np.sqrt(x**2 + y**2))
+
+    # 标准晶圆尺寸（半径，米）
+    standard_sizes = {
+        2: 0.025,  # 2英寸 = 50mm
+        3: 0.038,  # 3英寸 = 76mm
+        4: 0.050,  # 4英寸 = 100mm
+        6: 0.075,  # 6英寸 = 150mm
+        8: 0.100,  # 8英寸 = 200mm
+        12: 0.150,  # 12英寸 =
+    }
+
+    # 找到最接近的标准尺寸
+    best_size = None
+    min_diff = float("inf")
+
+    for size_inch, radius in standard_sizes.items():
+        diff = abs(data_radius - radius)
+        if diff < min_diff:
+            min_diff = diff
+            best_size = size_inch
+
+    wafer_radius = standard_sizes[best_size]
+
+    return wafer_radius, best_size
+
+
 def remove_tilt(x, y, z):
     """拟合平面 z = ax + by + c 并返回残差"""
     A = np.c_[x, y, np.ones(len(x))]
@@ -346,7 +385,7 @@ def calculate_nce(x, y, z, field_size_x=0.026, field_size_y=0.008, offset_x=0.0)
     return z_nce, grid_lines_x, grid_lines_y
 
 
-def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
+def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path, wafer_radius=None):
     """生成SFMA热力图"""
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
@@ -359,7 +398,11 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
     cbar = plt.colorbar(cntr)
     cbar.formatter.set_powerlimits((0, 0))
 
-    r = np.max(np.sqrt(x**2 + y**2))
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -368,12 +411,14 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path):
     plt.ylabel("Y (m)")
     plt.title(f"SFMA\nm3s = {metric_val * 1e9:.2f} nm")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
     # print(f"Saved SFMA heatmap to {output_image_path}")
 
 
-def plot_sfma_high_heatmap(x, y, z_sfma, threshold, output_image_path):
+def plot_sfma_high_heatmap(
+    x, y, z_sfma, threshold, output_image_path, wafer_radius=None
+):
     """生成大于特定阈值的SFMA热力图"""
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
@@ -383,6 +428,12 @@ def plot_sfma_high_heatmap(x, y, z_sfma, threshold, output_image_path):
     # threshold passed in is in meters.
 
     mask = (~np.isnan(z_sfma)) & (np.abs(z_sfma) > threshold)
+
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
 
     if np.sum(mask) == 0:
         plt.text(
@@ -398,7 +449,6 @@ def plot_sfma_high_heatmap(x, y, z_sfma, threshold, output_image_path):
         cbar = plt.colorbar(sc)
         cbar.formatter.set_powerlimits((0, 0))
 
-    r = np.max(np.sqrt(x**2 + y**2))
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -407,11 +457,11 @@ def plot_sfma_high_heatmap(x, y, z_sfma, threshold, output_image_path):
     plt.ylabel("Y (m)")
     plt.title(f"SFMA (> {threshold * 1e9:.1f} nm)")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
 
 
-def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
+def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None):
     """生成去一阶面形后的热力图"""
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
@@ -428,13 +478,21 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path):
     plt.ylabel("Y (m)")
     plt.title(f"去一阶面形\nPV = {pv * 1e6:.2f} um")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
     # print(f"Saved heatmap to {output_image_path}")
 
 
 def plot_tilt_heatmap(
-    x, y, tilt_urad, mean_val, std_val, max_val, metric_val, output_image_path
+    x,
+    y,
+    tilt_urad,
+    mean_val,
+    std_val,
+    max_val,
+    metric_val,
+    output_image_path,
+    wafer_radius=None,
 ):
     """生成局部倾斜角度热力图"""
     plt.figure(figsize=(8, 6))
@@ -449,7 +507,11 @@ def plot_tilt_heatmap(
     cbar = plt.colorbar(cntr)
     cbar.set_label("μrad")
 
-    r = np.max(np.sqrt(x**2 + y**2))
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -458,17 +520,25 @@ def plot_tilt_heatmap(
     plt.ylabel("Y (m)")
     plt.title(f"局部角分布\nmax= {max_val:.2f} μrad, m3s = {metric_val:.2f} μrad")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
     # print(f"Saved tilt heatmap to {output_image_path}")
 
 
-def plot_high_tilt_heatmap(x, y, tilt_urad, threshold, output_image_path):
+def plot_high_tilt_heatmap(
+    x, y, tilt_urad, threshold, output_image_path, wafer_radius=None
+):
     """生成大于特定阈值的局部倾斜角度热力图"""
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
 
     mask = (~np.isnan(tilt_urad)) & (tilt_urad > threshold)
+
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
 
     if np.sum(mask) == 0:
         # 如果没有超过阈值的点，生成一个空图或者提示图
@@ -486,7 +556,6 @@ def plot_high_tilt_heatmap(x, y, tilt_urad, threshold, output_image_path):
         cbar = plt.colorbar(sc)
         cbar.set_label("μrad")
 
-    r = np.max(np.sqrt(x**2 + y**2))
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -495,12 +564,14 @@ def plot_high_tilt_heatmap(x, y, tilt_urad, threshold, output_image_path):
     plt.ylabel("Y (m)")
     plt.title(f"局部角分布 (大于{threshold}μrad区域)")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
     # print(f"Saved high tilt heatmap to {output_image_path}")
 
 
-def plot_nce_heatmap(x, y, z_nce, std_val, grid_x, grid_y, output_image_path):
+def plot_nce_heatmap(
+    x, y, z_nce, std_val, grid_x, grid_y, output_image_path, wafer_radius=None
+):
     """生成NCE面形热力图"""
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
@@ -519,7 +590,11 @@ def plot_nce_heatmap(x, y, z_nce, std_val, grid_x, grid_y, output_image_path):
     for gy in grid_y:
         plt.axhline(gy, color="k", linewidth=0.5)
 
-    r = np.max(np.sqrt(x**2 + y**2))
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -528,15 +603,70 @@ def plot_nce_heatmap(x, y, z_nce, std_val, grid_x, grid_y, output_image_path):
     plt.ylabel("Y (m)")
     plt.title(f"NCE面形（96场布局）\n3std = {3 * std_val * 1e9:.2f} nm")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close()
     # print(f"Saved NCE heatmap to {output_image_path}")
+
+
+def extract_scale_from_xyz(input_path):
+    """
+    从XYZ文件的第8行提取scale参数
+
+    Args:
+        input_path: XYZ文件路径
+
+    Returns:
+        scale: 比例尺，单位米
+    """
+    scale = None
+    radius = None
+
+    try:
+        with open(input_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = [f.readline() for _ in range(14)]
+
+            # 第8行包含scale信息（行号从1开始，索引从0开始，所以是lines[7]）
+            if len(lines) >= 8:
+                line8 = lines[7].strip()
+                parts = line8.split()
+
+                if len(parts) > 0:
+                    # 最后一个字段是scale的原始值
+                    scale_raw = float(parts[-1])
+                    # 转换：保留3位小数，单位是mm，然后转换为m
+                    # 例如: 1196387112 -> 119.6387112 -> 0.120 mm -> 0.00012 m
+                    scale_mm = round(scale_raw / 1e10, 3)  # 转换为mm并保留3位小数
+                    scale_m = scale_mm / 1000  # 转换为米
+
+                    print(
+                        f"从文件头部读取scale: {scale_raw} -> {scale_mm}mm = {scale_m}m"
+                    )
+                    scale = scale_m
+
+            # 第13行包含radius信息
+            if len(lines) >= 13:
+                line13 = lines[12].strip()
+                parts = line13.split()
+
+                if len(parts) >= 1:
+                    # 第一个字段是radius，单位可能是 百分米 (例如: 1.5 表示 150mm = 0.15m)
+                    radius_value = float(parts[0])
+                    radius = radius_value * 0.1  # 转换为米 (1.5 -> 0.15m = 150mm)
+
+                    print(
+                        f"从文件头部读取radius: {radius_value} -> {radius * 1000:.1f}mm = {radius}m"
+                    )
+
+    except Exception as e:
+        print(f"无法从文件读取参数: {e}")
+
+    return scale, radius
 
 
 def process_xyz(
     input_path,
     output_path,
-    scale=0.000175,
+    scale=None,
     step_x=0.0034,
     step_y=0.0005,
     slit_height=0.008,
@@ -550,7 +680,7 @@ def process_xyz(
     Args:
         input_path: 输入XYZ文件路径
         output_path: 输出文件路径
-        scale: 原始数据分辨率,单位米 (默认: 0.000175m = 0.175mm)
+        scale: 原始数据分辨率,单位米 (默认: None, 自动从文件读取)
         step_x: X方向子口径尺寸,单位米 (默认: 0.0034m = 3.4mm)
         step_y: Y方向子口径尺寸,单位米 (默认: 0.0005m = 0.5mm)
         slit_height: 调平狭缝宽度,单位米 (默认: 0.008m = 8mm)
@@ -558,6 +688,15 @@ def process_xyz(
         sfma_threshold: SFMA阈值,单位米 (默认: 7.5nm)
         tilt_threshold: 局部倾斜阈值,单位弧度 (默认: 3urad)
     """
+    # 如果未指定scale，尝试从文件头部读取
+    radius_from_header = None  # 从文件头读取的半径
+    if scale is None:
+        scale, radius_from_header = extract_scale_from_xyz(input_path)
+        if scale is None:
+            # 如果无法从文件读取，使用默认值
+            scale = 0.000175
+            print(f"使用默认scale: {scale}m = {scale * 1000}mm")
+
     # print(f"Processing {input_path} -> {output_path}")
     # print(
     #     f"Parameters: scale={scale}m, step_x={step_x}m, step_y={step_y}m, slit_height={slit_height}m"
@@ -707,13 +846,67 @@ def process_xyz(
         y_arr = np.array(plot_y)
         z_arr = np.array(plot_z)
 
+        # 检测晶圆标准尺寸
+        wafer_radius_standard, wafer_size_inch = detect_wafer_radius(x_arr, y_arr)
+
+        # 计算数据的实际范围（不假设是完美的圆形）
+        data_max_radius = np.max(np.sqrt(x_arr**2 + y_arr**2))
+        x_extent = np.max(np.abs(x_arr))  # X方向的最大范围
+        y_extent = np.max(np.abs(y_arr))  # Y方向的最大范围
+        data_radius = max(x_extent, y_extent)  # 数据的实际半径
+
+        # 使用Y方向范围作为晶圆半径（假设上下未被裁切）
+        wafer_radius_exact = y_extent  # 精确值
+        # 四舍五入到最接近的5mm，用于绘制标准轮廓
+        wafer_radius = (
+            round(wafer_radius_exact * 1000 / 5) * 5 / 1000
+        )  # 转换到mm，四舍五入到5mm，再转回m
+
+        # 使用从文件头读取的半径（如果有的话），否则使用数据计算的半径
+        if radius_from_header is not None:
+            # 文件头信息仅供参考，仍使用Y方向范围
+            print(f"\n晶圆尺寸信息:")
+            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
+            print(f"  实际半径: {wafer_radius_exact * 1000:.1f}mm")
+            print(f"  轮廓半径: {wafer_radius * 1000:.0f}mm (标准化，用于绘制)")
+            print(
+                f"  晶圆直径: {wafer_radius * 2 * 1000:.0f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+            )
+            print(f"  文件头信息: {radius_from_header * 1000:.1f}mm (仅供参考)")
+            if x_extent < y_extent * 0.95:
+                print(
+                    f"  ⚠️  注意: X方向({x_extent * 1000:.1f}mm)小于Y方向，左右边缘可能被裁切"
+                )
+            print()
+        else:
+            print(f"\n晶圆尺寸信息:")
+            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
+            print(f"  实际半径: {wafer_radius_exact * 1000:.1f}mm")
+            print(f"  轮廓半径: {wafer_radius * 1000:.0f}mm (标准化，用于绘制)")
+            print(
+                f"  晶圆直径: {wafer_radius * 2 * 1000:.0f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+            )
+            if x_extent < y_extent * 0.95:
+                print(
+                    f"  ⚠️  注意: X方向({x_extent * 1000:.1f}mm)小于Y方向，左右边缘可能被裁切"
+                )
+            print()
+            print()
+            print(f"\n晶圆尺寸信息:")
+            print(
+                f"  识别尺寸: {wafer_size_inch}英寸 (标准半径: {wafer_radius_standard * 1000:.1f}mm)"
+            )
+            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
+            print(f"  数据半径: {data_radius * 1000:.1f}mm")
+            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm (含1.5%边距)\n")
+
         # 计算z_resid用于SFMA和Tilt分析
         z_resid = remove_tilt(x_arr, y_arr, z_arr)
 
         # 1. 去一阶面形
         z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
         image_path = output_path.replace(".txt", ".png")
-        plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path)
+        plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path, wafer_radius)
 
         # # 2. NCE分析 (已禁用)
         # z_nce, _, _ = calculate_nce(
@@ -751,12 +944,14 @@ def process_xyz(
         std_sfma = np.std(filtered_sfma)
         sfma_metric = np.median(filtered_sfma) + 3 * std_sfma
         sfma_image_path = output_path.replace(".txt", "-sfma.png")
-        plot_sfma_heatmap(x_arr, y_arr, z_sfma, sfma_metric, sfma_image_path)
+        plot_sfma_heatmap(
+            x_arr, y_arr, z_sfma, sfma_metric, sfma_image_path, wafer_radius
+        )
 
         # 1.1 SFMA 高阈值分析
         sfma_high_image_path = output_path.replace(".txt", "-sfma-high.png")
         plot_sfma_high_heatmap(
-            x_arr, y_arr, z_sfma, sfma_threshold, sfma_high_image_path
+            x_arr, y_arr, z_sfma, sfma_threshold, sfma_high_image_path, wafer_radius
         )
 
         # 保存SFMA map到txt文件
@@ -785,6 +980,7 @@ def process_xyz(
             max_tilt,
             tilt_metric,
             tilt_image_path,
+            wafer_radius,
         )
 
         # 保存Local Tilt map到txt文件
@@ -802,7 +998,12 @@ def process_xyz(
         # It takes tilt_urad and threshold. tilt_urad is in urad.
         # So we need to pass threshold in urad.
         plot_high_tilt_heatmap(
-            x_arr, y_arr, tilt_urad, tilt_threshold * 1e6, high_tilt_image_path
+            x_arr,
+            y_arr,
+            tilt_urad,
+            tilt_threshold * 1e6,
+            high_tilt_image_path,
+            wafer_radius,
         )
 
         return {

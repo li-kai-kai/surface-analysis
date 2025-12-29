@@ -97,7 +97,7 @@ with st.sidebar:
         "数据分辨率 (mm)",
         min_value=0.01,
         max_value=1.0,
-        value=0.175,
+        value=0.00,
         format="%.3f",
         step=0.001,
     )
@@ -203,7 +203,7 @@ else:
                     metrics = process_xyz(
                         input_path,
                         output_path,
-                        scale=scale_mm * 0.001,  # mm -> m
+                        scale=scale_mm * 0.001 if scale_mm != 0.00 else None,  # mm -> m
                         step_x=sub_x * 0.001,  # mm -> m
                         step_y=sub_y * 0.001,  # mm -> m
                         slit_height=slit_height * 0.001,  # mm -> m
