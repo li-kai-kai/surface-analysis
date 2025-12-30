@@ -6,6 +6,9 @@ from matplotlib import rcParams
 rcParams["font.sans-serif"] = ["Arial Unicode MS", "SimHei", "sans-serif"]
 rcParams["axes.unicode_minus"] = False
 
+import plotly.graph_objects as go
+from scipy.interpolate import griddata
+
 
 def detect_wafer_radius(x, y):
     """
@@ -654,6 +657,265 @@ def plot_nce_heatmap(
     # print(f"Saved NCE heatmap to {output_image_path}")
 
 
+def generate_plotly_heatmap(
+    x,
+    y,
+    z,
+    title,
+    metric_text=None,
+    circle_radius=None,
+    zmin=None,
+    zmax=None,
+    z_label=None,
+    interpolate=True,
+    mask_threshold=None,
+    mask_mode="abs_gt",
+):
+    """
+    Generate a Plotly Figure for heatmap.
+    """
+    # 1. Interpolate Grid for Smoothness (Upsampling)
+    # Target resolution for smooth rendering
+    res = 600
+
+    # Filter NaNs from input data before interpolation
+    valid_mask = ~np.isnan(z)
+    if np.sum(valid_mask) < 4:
+        pass
+
+    x_valid = x[valid_mask]
+    y_valid = y[valid_mask]
+    z_valid = z[valid_mask]
+
+    # Define limits based on input data
+    if len(x_valid) > 0:
+        xmin, xmax = np.min(x_valid), np.max(x_valid)
+        ymin, ymax = np.min(y_valid), np.max(y_valid)
+    else:
+        xmin, xmax = np.min(x), np.max(x)
+        ymin, ymax = np.min(y), np.max(y)
+
+    # Create high-res grid
+    xi = np.linspace(xmin, xmax, res)
+    yi = np.linspace(ymin, ymax, res)
+    Xi, Yi = np.meshgrid(xi, yi)
+
+    Zi = None
+    # Interpolate using linear method
+    if interpolate and len(x_valid) > 4:
+        try:
+            points = np.column_stack((x_valid, y_valid))
+            Zi = griddata(points, z_valid, (Xi, Yi), method="linear")
+        except Exception as e:
+            print(f"Interpolation failed: {e}")
+            Zi = None
+
+    # Fallback to raw data if needed
+    if Zi is None or np.all(np.isnan(Zi)):
+        # print("Fallback to raw data heatmap")
+        x_rounded = np.round(x, 9)
+        y_rounded = np.round(y, 9)
+        xi_final = np.sort(np.unique(x_rounded))
+        yi_final = np.sort(np.unique(y_rounded))
+
+        x_map = {v: i for i, v in enumerate(xi_final)}
+        y_map = {v: i for i, v in enumerate(yi_final)}
+        Zi_final = np.full((len(yi_final), len(xi_final)), np.nan)
+
+        for v_x, v_y, v_z in zip(x_rounded, y_rounded, z):
+            if not np.isnan(v_z) and v_y in y_map and v_x in x_map:
+                Zi_final[y_map[v_y], x_map[v_x]] = v_z
+
+        final_x, final_y, final_z = xi_final, yi_final, Zi_final
+    else:
+        final_x, final_y, final_z = xi, yi, Zi
+
+    # Apply Post-Interpolation Masking
+    if mask_threshold is not None:
+        if mask_mode == "abs_gt":
+            mask = np.abs(final_z) > mask_threshold
+        elif mask_mode == "gt":
+            mask = final_z > mask_threshold
+        else:
+            mask = np.ones_like(final_z, dtype=bool)
+
+        final_z = np.where(mask, final_z, np.nan)
+
+    # 2. Configure Layout
+    layout = go.Layout(
+        title=dict(
+            text=title + (f"<br>{metric_text}" if metric_text else ""),
+            x=0.5,  # Center title
+            xanchor="center",
+            yanchor="top",
+        ),
+        xaxis=dict(
+            title="X (m)",
+            scaleanchor="y",
+            scaleratio=1,
+            constrain="domain",
+            showgrid=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Y (m)",
+            scaleanchor="x",
+            scaleratio=1,
+            constrain="domain",
+            showgrid=False,
+            zeroline=False,
+        ),
+        width=600,
+        height=600,
+        margin=dict(l=50, r=50, t=80, b=50),
+        autosize=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    fig = go.Figure(layout=layout)
+
+    # 3. Add Heatmap
+    fig.add_trace(
+        go.Heatmap(
+            x=final_x,
+            y=final_y,
+            z=final_z,
+            colorscale="Jet",
+            zmin=zmin,
+            zmax=zmax,
+            colorbar=dict(
+                title=z_label,
+                thickness=15,
+                exponentformat="power",  # e.g. 10^-8
+                showexponent="all",
+                tickformat=".1g",  # General format, will use sci notation for small numbers
+            ),
+            zsmooth="best",
+            connectgaps=False,
+            hovertemplate="X: %{x:.4f} m<br>Y: %{y:.4f} m<br>Val: %{z:.4g} "
+            + (z_label if z_label else "")
+            + "<extra></extra>",
+        )
+    )
+
+    # 4. Add Circle Border
+    if circle_radius:
+        # B. Add Black Border Circle
+        fig.add_shape(
+            type="circle",
+            xref="x",
+            yref="y",
+            x0=-circle_radius,
+            y0=-circle_radius,
+            x1=circle_radius,
+            y1=circle_radius,
+            line=dict(color="black", width=2),
+            fillcolor="rgba(0,0,0,0)",
+        )
+
+        # Update axes to fit circle with some padding (1.1x like before)
+        limit = circle_radius * 1.1
+        fig.update_xaxes(range=[-limit, limit])
+        fig.update_yaxes(range=[-limit, limit])
+
+    return fig
+
+
+def generate_plotly_scatter(
+    x,
+    y,
+    z,
+    title,
+    circle_radius=None,
+    zmin=None,
+    zmax=None,
+    z_label=None,
+):
+    """
+    Generate a Plotly Figure using Scattergl (dots).
+    Ideal for threshold/sparse data visualization.
+    """
+    # Configure Layout (Reuse standard layout settings)
+    layout = go.Layout(
+        title=dict(
+            text=title,
+            x=0.5,
+            xanchor="center",
+            yanchor="top",
+        ),
+        xaxis=dict(
+            title="X (m)",
+            scaleanchor="y",
+            scaleratio=1,
+            constrain="domain",
+            showgrid=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Y (m)",
+            scaleanchor="x",
+            scaleratio=1,
+            constrain="domain",
+            showgrid=False,
+            zeroline=False,
+        ),
+        width=600,
+        height=600,
+        margin=dict(l=50, r=50, t=80, b=50),
+        autosize=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    fig = go.Figure(layout=layout)
+
+    # Add ScatterGL trace
+    fig.add_trace(
+        go.Scattergl(
+            x=x,
+            y=y,
+            mode="markers",
+            marker=dict(
+                size=4,  # Adjust dot size to mimic plt.scatter(s=5)
+                color=z,  # Color by value
+                colorscale="Jet",
+                cmin=zmin,
+                cmax=zmax,
+                colorbar=dict(
+                    title=z_label,
+                    thickness=15,
+                    exponentformat="power",
+                    showexponent="all",
+                    tickformat=".1g",
+                ),
+            ),
+            hovertemplate="X: %{x:.4f} m<br>Y: %{y:.4f} m<br>Val: %{marker.color:.4g} "
+            + (z_label if z_label else "")
+            + "<extra></extra>",
+        )
+    )
+
+    # Add Circle Border
+    if circle_radius:
+        fig.add_shape(
+            type="circle",
+            xref="x",
+            yref="y",
+            x0=-circle_radius,
+            y0=-circle_radius,
+            x1=circle_radius,
+            y1=circle_radius,
+            line=dict(color="black", width=2),
+            fillcolor="rgba(0,0,0,0)",
+        )
+        limit = circle_radius * 1.1
+        fig.update_xaxes(range=[-limit, limit])
+        fig.update_yaxes(range=[-limit, limit])
+
+    return fig
+
+
 def extract_scale_from_xyz(input_path):
     """
     从XYZ文件的头部提取scale、radius和完整header信息（基于Zygo标准）
@@ -1042,11 +1304,109 @@ def process_xyz(
             wafer_radius,
         )
 
-        return {
-            "pv": pv,
-            "sfma": sfma_metric,
-            "tilt": tilt_metric,
-        }
+        # --- Plotly Figure Generation ---
+        figures = {}
+
+        # 1. Surface Form (PV)
+        figures["pv"] = generate_plotly_heatmap(
+            x_arr,
+            y_arr,
+            z_resid,
+            "去一阶面形",
+            f"PV = {pv * 1e6:.2f} um",
+            wafer_radius,
+            z_label="m",
+        )
+
+        # 1.1 PV High
+        mask_pv = (~np.isnan(z_resid)) & (np.abs(z_resid) > pv_threshold)
+        figures["pv_high"] = generate_plotly_scatter(
+            x_arr[mask_pv],
+            y_arr[mask_pv],
+            z_resid[mask_pv],
+            f"去一阶面形 (> {pv_threshold * 1e6:.1f} μm)",
+            circle_radius=wafer_radius,
+            z_label="m",
+        )
+        if np.nansum(mask_pv) == 0:
+            figures["pv_high"].add_annotation(
+                text=f"No data > {pv_threshold * 1e6:.1f} μm",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+            )
+
+        # 2. SFMA
+        figures["sfma"] = generate_plotly_heatmap(
+            x_arr,
+            y_arr,
+            z_sfma,
+            "SFMA",
+            f"m3s = {sfma_metric * 1e9:.2f} nm",
+            wafer_radius,
+            z_label="m",
+        )
+
+        # 2.1 SFMA High
+        mask_sfma = (~np.isnan(z_sfma)) & (np.abs(z_sfma) > sfma_threshold)
+        figures["sfma_high"] = generate_plotly_scatter(
+            x_arr[mask_sfma],
+            y_arr[mask_sfma],
+            z_sfma[mask_sfma],
+            f"SFMA (> {sfma_threshold * 1e9:.1f} nm)",
+            circle_radius=wafer_radius,
+            z_label="m",
+        )
+        if np.nansum(mask_sfma) == 0:
+            figures["sfma_high"].add_annotation(
+                text=f"No data > {sfma_threshold * 1e9:.1f} nm",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+            )
+
+        # 3. Tilt
+        figures["tilt"] = generate_plotly_heatmap(
+            x_arr,
+            y_arr,
+            tilt_urad,
+            "局部角分布",
+            f"max= {max_tilt:.2f} μrad, m3s = {tilt_metric:.2f} μrad",
+            wafer_radius,
+            z_label="μrad",
+        )
+
+        # 3.1 Tilt High
+        # Note: tilt_threshold input is in radians, plot expects check against urad if converted?
+        # In logic above (lines 1030+), it calls plot_high_tilt_heatmap with threshold * 1e6.
+        # But tilt_urad is already in urad.
+        # So we compare tilt_urad > tilt_threshold * 1e6
+        thresh_urad = tilt_threshold * 1e6
+        mask_tilt = (~np.isnan(tilt_urad)) & (tilt_urad > thresh_urad)
+
+        figures["tilt_high"] = generate_plotly_scatter(
+            x_arr[mask_tilt],
+            y_arr[mask_tilt],
+            tilt_urad[mask_tilt],
+            f"局部角分布 (大于{thresh_urad}μrad区域)",
+            circle_radius=wafer_radius,
+            z_label="μrad",
+        )
+        if np.nansum(mask_tilt) == 0:
+            figures["tilt_high"].add_annotation(
+                text=f"No data > {thresh_urad} μrad",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+            )
+
+        return {"pv": pv, "sfma": sfma_metric, "tilt": tilt_metric, "figures": figures}
 
 
 if __name__ == "__main__":
