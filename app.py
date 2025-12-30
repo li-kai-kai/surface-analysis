@@ -93,14 +93,14 @@ with st.sidebar:
         step=0.1,
     )
 
-    scale_mm = st.number_input(
-        "数据分辨率 (mm)",
-        min_value=0.00,
-        max_value=1.0,
-        value=0.00,
-        format="%.3f",
-        step=0.001,
-    )
+    # scale_mm = st.number_input(
+    #     "数据分辨率 (mm)",
+    #     min_value=0.00,
+    #     max_value=1.0,
+    #     placeholder="自动识别",
+    #     format="%.3f",
+    #     step=0.001,
+    # )
 
     # 子口径参数
     # st.markdown("#### 子口径尺寸")
@@ -151,8 +151,17 @@ with st.sidebar:
         step=0.1,
     )
 
+    pv_threshold_um = st.number_input(
+        "PV阈值 (μm)",
+        min_value=0.01,
+        max_value=100.0,
+        value=0.1,
+        format="%.1f",
+        step=0.01,
+    )
+
     # 分析按钮
-    analyze_button = st.button("开始分析", type="primary", use_container_width=True)
+    analyze_button = st.button("开始分析", type="primary", width="stretch")
 
 # 初始化session state
 if "analysis_results" not in st.session_state:
@@ -203,13 +212,14 @@ else:
                     metrics = process_xyz(
                         input_path,
                         output_path,
-                        scale=scale_mm * 0.001 if scale_mm != 0.00 else None,  # mm -> m
+                        # scale=scale_mm * 0.001 if scale_mm != 0.00 else None,  # mm -> m
                         step_x=sub_x * 0.001,  # mm -> m
                         step_y=sub_y * 0.001,  # mm -> m
                         slit_height=slit_height * 0.001,  # mm -> m
                         edge_clearance=edge_clearance * 0.001,  # mm -> m
                         sfma_threshold=sfma_threshold_nm * 1e-9,  # nm -> m
                         tilt_threshold=tilt_threshold_urad * 1e-6,  # urad -> rad
+                        pv_threshold=pv_threshold_um * 1e-6,  # μm -> m
                     )
 
                     st.toast("分析完成!", icon="✅", duration=1)
@@ -221,6 +231,7 @@ else:
                     img_tilt = img_base + "-tilt.png"
                     img_tilt_high = img_base + "-tilt-high.png"
                     img_pv = img_base + ".png"
+                    img_pv_high = img_base + "-pv-high.png"
 
                     # 保存结果到session state
                     st.session_state.analysis_results = {
@@ -231,12 +242,14 @@ else:
                         "file_name_suffix": file_name_suffix,
                         "img_base": img_base,
                         "img_pv": img_pv,
+                        "img_pv_high": img_pv_high,
                         "img_sfma": img_sfma,
                         "img_sfma_high": img_sfma_high,
                         "img_tilt": img_tilt,
                         "img_tilt_high": img_tilt_high,
                         "sfma_threshold_nm": sfma_threshold_nm,
                         "tilt_threshold_urad": tilt_threshold_urad,
+                        "pv_threshold_um": pv_threshold_um,
                     }
 
                 except Exception as e:
@@ -262,8 +275,10 @@ else:
         img_tilt = results["img_tilt"]
         img_tilt_high = results["img_tilt_high"]
         img_pv = results["img_pv"]
+        img_pv_high = results["img_pv_high"]
         sfma_threshold_nm = results["sfma_threshold_nm"]
         tilt_threshold_urad = results["tilt_threshold_urad"]
+        pv_threshold_um = results["pv_threshold_um"]
 
         # 准备所有图像的ZIP文件
         zip_buffer = io.BytesIO()
@@ -278,6 +293,8 @@ else:
                 zf.write(img_tilt_high, os.path.basename(img_tilt_high))
             if os.path.exists(img_pv):
                 zf.write(img_pv, os.path.basename(img_pv))
+            if os.path.exists(img_pv_high):
+                zf.write(img_pv_high, os.path.basename(img_pv_high))
 
         # 显示结果标题和下载按钮
         h_col1, h_col2, h_col3 = st.columns([6, 1, 1])
@@ -315,7 +332,34 @@ else:
             st.markdown("---")
 
         # 3. 展示图表
-        # 第一行：SFMA面形 和 SFMA高阈值
+        # 第一行：去一阶面形 和 PV高阈值
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("去一阶面形")
+            if os.path.exists(img_pv):
+                st.image(
+                    img_pv,
+                    caption="去一阶面形 (PV)",
+                    width="stretch",
+                )
+            else:
+                st.warning("未生成去一阶面形图")
+
+        with col2:
+            st.subheader(f"去一阶面形 (>{pv_threshold_um}μm)")
+            if os.path.exists(img_pv_high):
+                st.image(
+                    img_pv_high,
+                    caption=f"去一阶面形 (>{pv_threshold_um}μm)",
+                    width="stretch",
+                )
+            else:
+                st.warning("未生成高PV阈值图")
+
+        st.markdown("---")
+
+        # 第二行：SFMA面形 和 SFMA高阈值
         col1, col2 = st.columns(2)
 
         with col1:
@@ -339,7 +383,7 @@ else:
                 st.image(
                     img_sfma,
                     caption="SFMA面形",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.warning("未生成SFMA面形")
@@ -350,12 +394,12 @@ else:
                 st.image(
                     img_sfma_high,
                     caption=f"SFMA面形 (>{sfma_threshold_nm}nm)",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.warning("未生成SFMA高阈值图")
 
-        # 第二行：局部角分布 和 局部角分布高阈值
+        # 第三行：局部角分布 和 局部角分布高阈值
         col3, col4 = st.columns(2)
 
         with col3:
@@ -379,7 +423,7 @@ else:
                 st.image(
                     img_tilt,
                     caption="局部角分布",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.warning("未生成局部角分布")
@@ -391,18 +435,7 @@ else:
                 st.image(
                     img_tilt_high,
                     caption=f"局部角分布 (>{tilt_threshold_urad}μrad)",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.warning("未生成高局部角分布图")
-
-        st.markdown("---")
-        st.subheader("去一阶面形")
-        if os.path.exists(img_pv):
-            st.image(
-                img_pv,
-                caption="去一阶面形 (PV)",
-                use_container_width=True,
-            )
-        else:
-            st.warning("未生成去一阶面形图")

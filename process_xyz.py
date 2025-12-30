@@ -411,7 +411,7 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path, wafer_radius=
     plt.ylabel("Y (m)")
     plt.title(f"SFMA\nm3s = {metric_val * 1e9:.2f} nm")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved SFMA heatmap to {output_image_path}")
 
@@ -457,7 +457,49 @@ def plot_sfma_high_heatmap(
     plt.ylabel("Y (m)")
     plt.title(f"SFMA (> {threshold * 1e9:.1f} nm)")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close()
+
+
+def plot_high_pv_heatmap(
+    x, y, z_resid, threshold, output_image_path, wafer_radius=None
+):
+    """生成大于特定阈值的PV热力图"""
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap("jet")
+
+    # threshold is in meters
+    mask = (~np.isnan(z_resid)) & (np.abs(z_resid) > threshold)
+
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
+
+    if np.sum(mask) == 0:
+        plt.text(
+            0.5,
+            0.5,
+            f"No data > {threshold * 1e6:.1f} μm",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=plt.gca().transAxes,
+        )
+    else:
+        sc = plt.scatter(x[mask], y[mask], c=z_resid[mask], cmap=cmap, s=5)
+        cbar = plt.colorbar(sc)
+        cbar.formatter.set_powerlimits((0, 0))
+
+    circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
+    plt.gca().add_patch(circle)
+
+    plt.axis("equal")
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.title(f"去一阶面形 (> {threshold * 1e6:.1f} μm)")
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
 
 
@@ -482,7 +524,7 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None
     plt.ylabel("Y (m)")
     plt.title(f"去一阶面形\nPV = {pv * 1e6:.2f} um")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved heatmap to {output_image_path}")
 
@@ -524,7 +566,7 @@ def plot_tilt_heatmap(
     plt.ylabel("Y (m)")
     plt.title(f"局部角分布\nmax= {max_val:.2f} μrad, m3s = {metric_val:.2f} μrad")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved tilt heatmap to {output_image_path}")
 
@@ -568,7 +610,7 @@ def plot_high_tilt_heatmap(
     plt.ylabel("Y (m)")
     plt.title(f"局部角分布 (大于{threshold}μrad区域)")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
     # print(f"Saved high tilt heatmap to {output_image_path}")
 
@@ -666,6 +708,7 @@ def process_xyz(
     edge_clearance=0.05,
     sfma_threshold=7.5e-9,
     tilt_threshold=3e-6,
+    pv_threshold=50e-6,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -680,6 +723,7 @@ def process_xyz(
         edge_clearance: 边缘清除量,单位米 (默认: 0.0m = 0mm, 不清除边缘)
         sfma_threshold: SFMA阈值,单位米 (默认: 7.5nm)
         tilt_threshold: 局部倾斜阈值,单位弧度 (默认: 3urad)
+        pv_threshold: PV阈值,单位米 (默认: 50μm)
     """
     # 如果未指定scale，尝试从文件头部读取
     radius_from_header = None  # 从文件头读取的半径
@@ -893,6 +937,12 @@ def process_xyz(
         z_resid, pv = calculate_surface_form(x_arr, y_arr, z_arr)
         image_path = output_path.replace(".txt", ".png")
         plot_surface_heatmap(x_arr, y_arr, z_resid, pv, image_path, wafer_radius)
+
+        # 1.1 PV 高阈值分析
+        pv_high_image_path = output_path.replace(".txt", "-pv-high.png")
+        plot_high_pv_heatmap(
+            x_arr, y_arr, z_resid, pv_threshold, pv_high_image_path, wafer_radius
+        )
 
         # # 2. NCE分析 (已禁用)
         # z_nce, _, _ = calculate_nce(
