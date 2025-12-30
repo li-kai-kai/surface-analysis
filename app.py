@@ -95,7 +95,7 @@ with st.sidebar:
 
     scale_mm = st.number_input(
         "数据分辨率 (mm)",
-        min_value=0.01,
+        min_value=0.00,
         max_value=1.0,
         value=0.00,
         format="%.3f",

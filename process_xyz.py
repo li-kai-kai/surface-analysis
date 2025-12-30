@@ -610,57 +610,46 @@ def plot_nce_heatmap(
 
 def extract_scale_from_xyz(input_path):
     """
-    从XYZ文件的第8行提取scale参数
+    从XYZ文件的头部提取scale、radius和完整header信息（基于Zygo标准）
 
     Args:
         input_path: XYZ文件路径
 
     Returns:
-        scale: 比例尺，单位米
+        (scale, radius, header): 比例尺(米)、晶圆半径(米)和ZygoHeader对象的元组
     """
+    from zygo_header import parse_zygo_header
+
     scale = None
     radius = None
+    header = None
 
     try:
-        with open(input_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = [f.readline() for _ in range(14)]
+        # 使用专业的Zygo header解析器
+        header = parse_zygo_header(input_path)
 
-            # 第8行包含scale信息（行号从1开始，索引从0开始，所以是lines[7]）
-            if len(lines) >= 8:
-                line8 = lines[7].strip()
-                parts = line8.split()
+        if header:
+            # 从header中提取scale (pixel_size)
+            scale = header.pixel_size
+            print(f"从文件头部读取pixel_size: {scale * 1000:.3f}mm")
 
-                if len(parts) > 0:
-                    # 最后一个字段是scale的原始值
-                    scale_raw = float(parts[-1])
-                    # 转换：保留3位小数，单位是mm，然后转换为m
-                    # 例如: 1196387112 -> 119.6387112 -> 0.120 mm -> 0.00012 m
-                    scale_mm = round(scale_raw / 1e10, 3)  # 转换为mm并保留3位小数
-                    scale_m = scale_mm / 1000  # 转换为米
+            # 计算晶圆半径：phase_width 或 phase_height / 2 * pixel_size
+            wafer_diameter_pixels = max(header.phase_width, header.phase_height)
+            radius = (wafer_diameter_pixels / 2) * scale
+            print(f"晶圆尺寸: {wafer_diameter_pixels}像素 → 半径 {radius * 1000:.3f}mm")
 
-                    print(
-                        f"从文件头部读取scale: {scale_raw} -> {scale_mm}mm = {scale_m}m"
-                    )
-                    scale = scale_m
-
-            # 第13行包含radius信息
-            if len(lines) >= 13:
-                line13 = lines[12].strip()
-                parts = line13.split()
-
-                if len(parts) >= 1:
-                    # 第一个字段是radius，单位可能是 百分米 (例如: 1.5 表示 150mm = 0.15m)
-                    radius_value = float(parts[0])
-                    radius = radius_value * 0.1  # 转换为米 (1.5 -> 0.15m = 150mm)
-
-                    print(
-                        f"从文件头部读取radius: {radius_value} -> {radius * 1000:.1f}mm = {radius}m"
-                    )
+            # 可选：打印一些有用的header信息
+            if header.software_date:
+                print(f"测量日期: {header.software_date}")
+            if header.objective_name and header.objective_name.strip().strip('"'):
+                print(f"物镜: {header.objective_name.strip('"')}")
+            if header.wavelength > 0:
+                print(f"波长: {header.wavelength * 1e9:.3f}nm")
 
     except Exception as e:
         print(f"无法从文件读取参数: {e}")
 
-    return scale, radius
+    return scale, radius, header
 
 
 def process_xyz(
@@ -690,8 +679,9 @@ def process_xyz(
     """
     # 如果未指定scale，尝试从文件头部读取
     radius_from_header = None  # 从文件头读取的半径
+    zygo_header = None  # Zygo文件头对象
     if scale is None:
-        scale, radius_from_header = extract_scale_from_xyz(input_path)
+        scale, radius_from_header, zygo_header = extract_scale_from_xyz(input_path)
         if scale is None:
             # 如果无法从文件读取，使用默认值
             scale = 0.000175
@@ -706,34 +696,30 @@ def process_xyz(
     STEP_X = step_x
     STEP_Y = step_y
 
-    # 第一遍: 读取数据确定中心和边界
-    try:
-        with open(input_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except UnicodeDecodeError:
-        # 如果 UTF-8 失败，尝试 GBK
-        with open(input_path, "r", encoding="gbk", errors="ignore") as f:
-            lines = f.readlines()
+    # 使用专业的XYZfile类加载数据
+    from xyzfile import XYZfile
 
-    # print(f"Read {len(lines)} lines from input.")
+    xyzfile_obj = XYZfile()
+    if not xyzfile_obj.openFile(input_path):
+        print("Error: Failed to open XYZ file!")
+        return None
 
+    # 使用getHeight()方法获取数据(已经是米为单位，NaN替换"No Data")
+    height_data = xyzfile_obj.getHeight()  # shape: (height, width)
+
+    #  转换2D数组为点云格式
     raw_data = []
-    for line in lines[14:]:
-        parts = line.strip().split()
-        if len(parts) < 3:
-            continue
+    phase_origin = xyzfile_obj.getOrigin()  # (x_origin, y_origin)
 
-        try:
-            ix = int(parts[0])
-            iy = int(parts[1])
-            if parts[2] == "No":
-                continue
-            z_um = float(parts[2])
-            raw_data.append((ix, iy, z_um))
-        except ValueError:
-            continue
-
-    # print(f"Found {len(raw_data)} valid data points.")
+    for iy in range(height_data.shape[0]):
+        for ix in range(height_data.shape[1]):
+            z_m = height_data[iy, ix]
+            if not np.isnan(z_m):  # 跳过无效数据
+                # 转换回原始像素坐标
+                pixel_ix = ix + phase_origin[0]
+                pixel_iy = iy + phase_origin[1]
+                z_um = z_m * 1e6  # 转换回微米以保持兼容性
+                raw_data.append((pixel_ix, pixel_iy, z_um))
 
     if len(raw_data) == 0:
         print("Error: No valid data points found in input file!")
@@ -855,22 +841,17 @@ def process_xyz(
         y_extent = np.max(np.abs(y_arr))  # Y方向的最大范围
         data_radius = max(x_extent, y_extent)  # 数据的实际半径
 
-        # 使用Y方向范围作为晶圆半径（假设上下未被裁切）
-        wafer_radius_exact = y_extent  # 精确值
-        # 四舍五入到最接近的5mm，用于绘制标准轮廓
-        wafer_radius = (
-            round(wafer_radius_exact * 1000 / 5) * 5 / 1000
-        )  # 转换到mm，四舍五入到5mm，再转回m
+        # 使用Y方向范围作为晶圆半径（假设上下未被裁切），直接使用实际值
+        wafer_radius = y_extent
 
         # 使用从文件头读取的半径（如果有的话），否则使用数据计算的半径
         if radius_from_header is not None:
             # 文件头信息仅供参考，仍使用Y方向范围
             print(f"\n晶圆尺寸信息:")
             print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  实际半径: {wafer_radius_exact * 1000:.1f}mm")
-            print(f"  轮廓半径: {wafer_radius * 1000:.0f}mm (标准化，用于绘制)")
+            print(f"  晶圆半径: {wafer_radius * 1000:.1f}mm (Y方向实际半径)")
             print(
-                f"  晶圆直径: {wafer_radius * 2 * 1000:.0f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+                f"  晶圆直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
             )
             print(f"  文件头信息: {radius_from_header * 1000:.1f}mm (仅供参考)")
             if x_extent < y_extent * 0.95:
@@ -881,10 +862,9 @@ def process_xyz(
         else:
             print(f"\n晶圆尺寸信息:")
             print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  实际半径: {wafer_radius_exact * 1000:.1f}mm")
-            print(f"  轮廓半径: {wafer_radius * 1000:.0f}mm (标准化，用于绘制)")
+            print(f"  晶圆半径: {wafer_radius * 1000:.1f}mm (Y方向实际半径)")
             print(
-                f"  晶圆直径: {wafer_radius * 2 * 1000:.0f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+                f"  晶圆直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
             )
             if x_extent < y_extent * 0.95:
                 print(
