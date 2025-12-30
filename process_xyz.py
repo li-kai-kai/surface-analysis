@@ -469,7 +469,11 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None
     cbar = plt.colorbar(cntr)
     cbar.formatter.set_powerlimits((0, 0))
 
-    r = np.max(np.sqrt(x**2 + y**2))
+    # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
+    if wafer_radius is None:
+        r = np.max(np.sqrt(x**2 + y**2))
+    else:
+        r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
     plt.gca().add_patch(circle)
 
@@ -841,17 +845,18 @@ def process_xyz(
         y_extent = np.max(np.abs(y_arr))  # Y方向的最大范围
         data_radius = max(x_extent, y_extent)  # 数据的实际半径
 
-        # 使用Y方向范围作为晶圆半径（假设上下未被裁切），直接使用实际值
-        wafer_radius = y_extent
+        # 使用数据的实际最大半径作为晶圆半径，确保轮廓能包含所有数据点
+        wafer_radius = data_max_radius
 
         # 使用从文件头读取的半径（如果有的话），否则使用数据计算的半径
         if radius_from_header is not None:
-            # 文件头信息仅供参考，仍使用Y方向范围
+            # 文件头信息仅供参考，使用实际数据的最大半径
             print(f"\n晶圆尺寸信息:")
             print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  晶圆半径: {wafer_radius * 1000:.1f}mm (Y方向实际半径)")
+            print(f"  数据最大半径: {data_max_radius * 1000:.1f}mm")
+            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm")
             print(
-                f"  晶圆直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+                f"  轮廓直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
             )
             print(f"  文件头信息: {radius_from_header * 1000:.1f}mm (仅供参考)")
             if x_extent < y_extent * 0.95:
@@ -862,9 +867,10 @@ def process_xyz(
         else:
             print(f"\n晶圆尺寸信息:")
             print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  晶圆半径: {wafer_radius * 1000:.1f}mm (Y方向实际半径)")
+            print(f"  数据最大半径: {data_max_radius * 1000:.1f}mm")
+            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm")
             print(
-                f"  晶圆直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
+                f"  轮廓直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
             )
             if x_extent < y_extent * 0.95:
                 print(
