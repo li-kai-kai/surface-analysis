@@ -344,7 +344,7 @@ else:
         with col1:
             st.subheader("去一阶面形")
             if metrics and "figures" in metrics and "pv" in metrics["figures"]:
-                st.plotly_chart(metrics["figures"]["pv"], use_container_width=True)
+                st.plotly_chart(metrics["figures"]["pv"], width="stretch")
             elif os.path.exists(img_pv):
                 st.image(
                     img_pv,
@@ -357,7 +357,7 @@ else:
         with col2:
             st.subheader(f"去一阶面形 (>{pv_threshold_um}μm)")
             if metrics and "figures" in metrics and "pv_high" in metrics["figures"]:
-                st.plotly_chart(metrics["figures"]["pv_high"], use_container_width=True)
+                st.plotly_chart(metrics["figures"]["pv_high"], width="stretch")
             elif os.path.exists(img_pv_high):
                 st.image(
                     img_pv_high,
@@ -390,7 +390,7 @@ else:
                         )
 
             if metrics and "figures" in metrics and "sfma" in metrics["figures"]:
-                st.plotly_chart(metrics["figures"]["sfma"], use_container_width=True)
+                st.plotly_chart(metrics["figures"]["sfma"], width="stretch")
             elif os.path.exists(img_sfma):
                 st.image(
                     img_sfma,
@@ -403,9 +403,7 @@ else:
         with col2:
             st.subheader(f"SFMA面形 (>{sfma_threshold_nm}nm)")
             if metrics and "figures" in metrics and "sfma_high" in metrics["figures"]:
-                st.plotly_chart(
-                    metrics["figures"]["sfma_high"], use_container_width=True
-                )
+                st.plotly_chart(metrics["figures"]["sfma_high"], width="stretch")
             elif os.path.exists(img_sfma_high):
                 st.image(
                     img_sfma_high,
@@ -436,7 +434,7 @@ else:
                         )
 
             if metrics and "figures" in metrics and "tilt" in metrics["figures"]:
-                st.plotly_chart(metrics["figures"]["tilt"], use_container_width=True)
+                st.plotly_chart(metrics["figures"]["tilt"], width="stretch")
             elif os.path.exists(img_tilt):
                 st.image(
                     img_tilt,
@@ -450,9 +448,7 @@ else:
             st.subheader(f"局部角分布 (>{tilt_threshold_urad}μrad)")
             img_tilt_high = img_base + "-tilt-high.png"
             if metrics and "figures" in metrics and "tilt_high" in metrics["figures"]:
-                st.plotly_chart(
-                    metrics["figures"]["tilt_high"], use_container_width=True
-                )
+                st.plotly_chart(metrics["figures"]["tilt_high"], width="stretch")
             elif os.path.exists(img_tilt_high):
                 st.image(
                     img_tilt_high,

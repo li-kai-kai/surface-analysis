@@ -13,19 +13,45 @@ import sys
 import subprocess
 import shutil
 
+
 def clean_build_dirs():
     """清理之前的构建目录"""
-    dirs_to_clean = ['build', 'dist']
+    dirs_to_clean = ["build", "dist"]
+
+    def on_rm_error(func, path, exc_info):
+        """
+        处理删除文件时的错误
+        如果是权限错误，尝试修改文件权限再次删除
+        """
+        import stat
+
+        os.chmod(path, stat.S_IWRITE)
+        try:
+            func(path)
+        except Exception:
+            pass
+
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
             print(f"清理目录: {dir_name}")
-            shutil.rmtree(dir_name)
-    
+            try:
+                shutil.rmtree(dir_name, onerror=on_rm_error)
+            except Exception as e:
+                print(f"⚠️ 无法完全清理目录 {dir_name}: {e}")
+                print("请检查是否有程序正在占用文件 (例如 面形分析工具.exe)")
+
+    # 再次检查是否真的删除了，如果没有，提示用户
+    for dir_name in dirs_to_clean:
+        if os.path.exists(dir_name):
+            print(f"⚠️ 警告: 目录 {dir_name} 仍然存在，可能部分文件未能删除。")
+            print("建议手动关闭所有相关程序后重试，或者手动删除该目录。")
+
     # 清理旧的 spec 文件
-    spec_file = 'surface_analyzer.spec'
+    spec_file = "surface_analyzer.spec"
     if os.path.exists(spec_file):
         print(f"删除旧的 spec 文件: {spec_file}")
         os.remove(spec_file)
+
 
 def create_spec_file():
     """创建 PyInstaller spec 文件"""
@@ -162,21 +188,22 @@ exe = EXE(
     icon=None,  # 可以在这里指定图标文件路径
 )
 """
-    
-    spec_file = 'surface_analyzer.spec'
-    with open(spec_file, 'w', encoding='utf-8') as f:
+
+    spec_file = "surface_analyzer.spec"
+    with open(spec_file, "w", encoding="utf-8") as f:
         f.write(spec_content)
-    
+
     print(f"已创建 spec 文件: {spec_file}")
     return spec_file
+
 
 def build_exe(spec_file):
     """使用 PyInstaller 构建可执行文件"""
     print("\n开始构建可执行文件...")
     print("这可能需要几分钟时间，请耐心等待...\n")
-    
-    cmd = ['pyinstaller', '--clean', spec_file]
-    
+
+    cmd = ["pyinstaller", "--clean", spec_file]
+
     try:
         result = subprocess.run(cmd, check=True, capture_output=False, text=True)
         print("\n✅ 构建成功!")
@@ -190,38 +217,39 @@ def build_exe(spec_file):
         print("请先安装 PyInstaller: pip install pyinstaller")
         return False
 
+
 def main():
     """主函数"""
     print("=" * 60)
     print("面形分析工具 - PyInstaller 打包脚本")
     print("=" * 60)
     print()
-    
+
     # 检查是否在正确的目录
-    required_files = ['launcher.py', 'app.py', 'process_xyz.py', 'pyproject.toml']
+    required_files = ["launcher.py", "app.py", "process_xyz.py", "pyproject.toml"]
     missing_files = [f for f in required_files if not os.path.exists(f)]
-    
+
     if missing_files:
         print("❌ 错误: 缺少必要的文件:")
         for f in missing_files:
             print(f"  - {f}")
         print("\n请确保在项目根目录下运行此脚本!")
         sys.exit(1)
-    
+
     # 清理旧的构建文件
     print("步骤 1/3: 清理旧的构建文件")
     clean_build_dirs()
     print()
-    
+
     # 创建 spec 文件
     print("步骤 2/3: 创建 PyInstaller spec 文件")
     spec_file = create_spec_file()
     print()
-    
+
     # 构建可执行文件
     print("步骤 3/3: 构建可执行文件")
     success = build_exe(spec_file)
-    
+
     if success:
         print("\n" + "=" * 60)
         print("打包完成!")
@@ -238,5 +266,6 @@ def main():
         print("\n打包失败，请检查错误信息")
         sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
