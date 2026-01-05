@@ -14,8 +14,32 @@ import subprocess
 import shutil
 
 
+def kill_running_process():
+    """尝试关闭正在运行的应用程序"""
+    process_name = "面形分析工具.exe"
+    print(f"尝试关闭正在运行的进程: {process_name}")
+
+    if os.name == "nt":  # Windows
+        try:
+            # /F 强制终止 /IM 镜像名称
+            result = subprocess.run(
+                ["taskkill", "/F", "/IM", process_name], capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                print("✅ 已成功关闭运行中的程序")
+            elif "没有找到进程" in result.stderr or "not found" in result.stderr:
+                print("未发现正在运行的程序 (正常)")
+            else:
+                print(f"⚠️ 关闭程序时可能有问题: {result.stderr.strip()}")
+        except Exception as e:
+            print(f"⚠️ 无法自动关闭程序: {e}")
+
+
 def clean_build_dirs():
     """清理之前的构建目录"""
+    # 先尝试关闭进程
+    kill_running_process()
+
     dirs_to_clean = ["build", "dist"]
 
     def on_rm_error(func, path, exc_info):
@@ -41,16 +65,24 @@ def clean_build_dirs():
                 print("请检查是否有程序正在占用文件 (例如 面形分析工具.exe)")
 
     # 再次检查是否真的删除了，如果没有，提示用户
+    success = True
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
             print(f"⚠️ 警告: 目录 {dir_name} 仍然存在，可能部分文件未能删除。")
-            print("建议手动关闭所有相关程序后重试，或者手动删除该目录。")
+            print("❌ 错误: 无法清理构建目录，文件可能被占用。")
+            print("请手动关闭所有相关程序 (如 面形分析工具.exe) 后重试。")
+            success = False
 
     # 清理旧的 spec 文件
     spec_file = "surface_analyzer.spec"
     if os.path.exists(spec_file):
         print(f"删除旧的 spec 文件: {spec_file}")
-        os.remove(spec_file)
+        try:
+            os.remove(spec_file)
+        except Exception:
+            pass
+
+    return success
 
 
 def create_spec_file():
@@ -141,6 +173,7 @@ a = Analysis(
         'requests',
         'protobuf',
         'google.protobuf',
+        'pystray',
     ],
     hookspath=[],
     hooksconfig={},
@@ -238,7 +271,9 @@ def main():
 
     # 清理旧的构建文件
     print("步骤 1/3: 清理旧的构建文件")
-    clean_build_dirs()
+    if not clean_build_dirs():
+        print("\n❌ 清理失败，终止构建。")
+        sys.exit(1)
     print()
 
     # 创建 spec 文件
