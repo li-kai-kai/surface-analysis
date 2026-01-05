@@ -1,3 +1,31 @@
+# 面形分析工具
+
+## 快速开始
+
+### 环境准备
+本项目使用 [`uv`](https://github.com/astral-sh/uv) 进行依赖管理。
+
+1. **安装 uv**
+   ```bash
+   # Linux / macOS
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Windows
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+2. **初始化环境**
+   ```bash
+   uv sync
+   ```
+
+3. **运行程序**
+   ```bash
+   uv run launcher.py
+   ```
+
+---
+
 # 面形分析工具 - 指标计算说明
 
 ## 概述

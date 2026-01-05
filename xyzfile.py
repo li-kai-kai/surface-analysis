@@ -14,8 +14,6 @@ __email__ = "superflat-pcp@synchrotron-soleil.fr"
 __version__ = "0.1.0"
 
 
-import tkinter
-from tkinter import filedialog
 from pathlib import Path
 import time
 import numpy as np
@@ -127,11 +125,18 @@ class XYZfile(object):
         if Path(filename).is_file():
             self.filepath = filename
         else:
-            tkinter.Tk().withdraw()
-            self.filepath = filedialog.askopenfilename(
-                title="open a Zygo.xyz data file",
-                filetypes=(("Zygo XYZ", "*.xyz"), ("Zygo ascii", "*.ascii")),
-            )
+            try:
+                import tkinter
+                from tkinter import filedialog
+
+                tkinter.Tk().withdraw()
+                self.filepath = filedialog.askopenfilename(
+                    title="open a Zygo.xyz data file",
+                    filetypes=(("Zygo XYZ", "*.xyz"), ("Zygo ascii", "*.ascii")),
+                )
+            except ImportError:
+                print("Error: tkinter not installed, cannot open file dialog.")
+                return False
         print(self.filepath)
 
         acqMode = ("phase", "fringe", "scan")

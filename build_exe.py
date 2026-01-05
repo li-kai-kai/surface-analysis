@@ -3,9 +3,9 @@ PyInstaller 打包脚本
 用于将 Streamlit 面形分析工具打包成 Windows 可执行文件
 
 使用方法:
-1. 确保已安装所有依赖: pip install -r requirements.txt
-2. 安装 PyInstaller: pip install pyinstaller
-3. 运行此脚本: python build_exe.py
+1. 确保已安装 uv
+2. 初始化环境并安装依赖: uv sync
+3. 运行此脚本: uv run python build_exe.py
 """
 
 import os
@@ -198,7 +198,7 @@ def main():
     print()
     
     # 检查是否在正确的目录
-    required_files = ['launcher.py', 'app.py', 'process_xyz.py', 'requirements.txt']
+    required_files = ['launcher.py', 'app.py', 'process_xyz.py', 'pyproject.toml']
     missing_files = [f for f in required_files if not os.path.exists(f)]
     
     if missing_files:

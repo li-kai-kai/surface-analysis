@@ -4,15 +4,14 @@
 
 ### 方法一: 使用自动化脚本 (推荐)
 
-1. **安装依赖**
+1. **初始化环境**
    ```powershell
-   pip install -r requirements.txt
-   pip install pyinstaller
+   uv sync
    ```
 
 2. **运行打包脚本**
    ```powershell
-   python build_exe.py
+   uv run python build_exe.py
    ```
 
 3. **获取可执行文件**
@@ -25,7 +24,7 @@
 
 1. **生成 spec 文件**
    ```powershell
-   pyi-makespec --onefile --windowed --name "面形分析工具" launcher.py
+   uv run pyi-makespec --onefile --windowed --name "面形分析工具" launcher.py
    ```
 
 2. **编辑 spec 文件**
@@ -35,7 +34,7 @@
 
 3. **执行打包**
    ```powershell
-   pyinstaller --clean "面形分析工具.spec"
+   uv run pyinstaller --clean "面形分析工具.spec"
    ```
 
 ## 常见问题
@@ -232,7 +231,7 @@ Remove-Item -Recurse -Force build, dist
 # 删除 spec 文件
 Remove-Item "面形分析工具.spec"
 # 重新打包
-python build_exe.py
+uv run python build_exe.py
 ```
 
 ## 联系支持

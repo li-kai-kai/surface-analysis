@@ -945,15 +945,6 @@ def extract_scale_from_xyz(input_path):
             wafer_diameter_pixels = max(header.phase_width, header.phase_height)
             radius = (wafer_diameter_pixels / 2) * scale
             print(f"晶圆尺寸: {wafer_diameter_pixels}像素 → 半径 {radius * 1000:.3f}mm")
-
-            # 可选：打印一些有用的header信息
-            if header.software_date:
-                print(f"测量日期: {header.software_date}")
-            if header.objective_name and header.objective_name.strip().strip('"'):
-                print(f"物镜: {header.objective_name.strip('"')}")
-            if header.wavelength > 0:
-                print(f"波长: {header.wavelength * 1e9:.3f}nm")
-
     except Exception as e:
         print(f"无法从文件读取参数: {e}")
 
