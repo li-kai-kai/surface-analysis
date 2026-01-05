@@ -76,12 +76,18 @@ st.markdown(
 
 # 侧边栏 - 参数设置
 with st.sidebar:
+
+    def reset_results():
+        """当上传新文件时清空分析结果"""
+        st.session_state.analysis_results = None
+
     # 文件上传区域
     uploaded_file = st.file_uploader(
         "上传zygo文件",
         type=["xyz"],
         help="请选择要分析的zygo文件",
         label_visibility="collapsed",
+        on_change=reset_results,
     )
 
     slit_height = st.number_input(
