@@ -118,6 +118,8 @@ a = Analysis(
         ('app.py', '.'),
         ('process_xyz.py', '.'),
         ('analyze_data.py', '.'),
+        ('zygo_header.py', '.'),
+        ('xyzfile.py', '.'),
     ] + datas,
     hiddenimports=[
         'streamlit',
