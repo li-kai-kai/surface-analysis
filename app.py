@@ -138,6 +138,54 @@ with st.sidebar:
         step=0.1,
     )
 
+    st.markdown("### ROA参数")
+    roa_ref_col1, roa_ref_col2 = st.columns(2)
+    with roa_ref_col1:
+        roa_reference_radius_min_mm = st.number_input(
+            "Reference R1 (mm)",
+            min_value=0.0,
+            max_value=300.0,
+            value=20.0,
+            format="%.1f",
+            step=1.0,
+        )
+    with roa_ref_col2:
+        roa_reference_radius_max_mm = st.number_input(
+            "Reference R2 (mm)",
+            min_value=0.0,
+            max_value=300.0,
+            value=100.0,
+            format="%.1f",
+            step=1.0,
+        )
+
+    roa_edge_radius_start_mm = st.number_input(
+        "Edge Region起点 (mm)",
+        min_value=0.0,
+        max_value=300.0,
+        value=120.0,
+        format="%.1f",
+        step=1.0,
+    )
+    roa_bin_width_mm = st.number_input(
+        "ROA bin宽度 (mm)",
+        min_value=0.1,
+        max_value=10.0,
+        value=0.5,
+        format="%.1f",
+        step=0.1,
+    )
+    roa_reference_fit_label = st.selectbox(
+        "Reference fit",
+        options=["一次线性", "常数", "二次曲线"],
+        index=2,
+    )
+    roa_reference_fit = {
+        "常数": "constant",
+        "一次线性": "linear",
+        "二次曲线": "quadratic",
+    }[roa_reference_fit_label]
+
     # 阈值设置
     sfma_threshold_nm = st.number_input(
         "SFMA阈值 (nm)",
@@ -226,6 +274,11 @@ else:
                         sfma_threshold=sfma_threshold_nm * 1e-9,  # nm -> m
                         tilt_threshold=tilt_threshold_urad * 1e-6,  # urad -> rad
                         pv_threshold=pv_threshold_um * 1e-6,  # μm -> m
+                        roa_reference_radius_min=roa_reference_radius_min_mm * 0.001,
+                        roa_reference_radius_max=roa_reference_radius_max_mm * 0.001,
+                        roa_edge_radius_start=roa_edge_radius_start_mm * 0.001,
+                        roa_bin_width=roa_bin_width_mm * 0.001,
+                        roa_reference_fit=roa_reference_fit,
                     )
 
                     st.toast("分析完成!", icon="✅", duration=1)
@@ -256,6 +309,11 @@ else:
                         "sfma_threshold_nm": sfma_threshold_nm,
                         "tilt_threshold_urad": tilt_threshold_urad,
                         "pv_threshold_um": pv_threshold_um,
+                        "roa_reference_radius_min_mm": roa_reference_radius_min_mm,
+                        "roa_reference_radius_max_mm": roa_reference_radius_max_mm,
+                        "roa_edge_radius_start_mm": roa_edge_radius_start_mm,
+                        "roa_bin_width_mm": roa_bin_width_mm,
+                        "roa_reference_fit": roa_reference_fit,
                     }
 
                 except Exception as e:
@@ -285,6 +343,7 @@ else:
         sfma_threshold_nm = results["sfma_threshold_nm"]
         tilt_threshold_urad = results["tilt_threshold_urad"]
         pv_threshold_um = results["pv_threshold_um"]
+        roa_edge_radius_start_mm = results.get("roa_edge_radius_start_mm", 120.0)
 
         # 准备所有图像的ZIP文件
         zip_buffer = io.BytesIO()
@@ -335,9 +394,18 @@ else:
             with m_col3:
                 st.metric("局部角分布 (m+3σ)", f"{metrics['tilt']:.2f} μrad")
 
+            if "roa_max" in metrics:
+                st.metric("Max ROA", f"{metrics['roa_max']:.2f} nm")
+                st.metric("Weighted mean ROA", f"{metrics['roa_weighted_mean']:.2f} nm")
+
             st.markdown("---")
 
         # 3. 展示图表
+        if metrics and "figures" in metrics and "roa" in metrics["figures"]:
+            st.subheader("ROA剖面图")
+            st.plotly_chart(metrics["figures"]["roa"], width="stretch")
+            st.markdown("---")
+
         # 第一行：去一阶面形 和 PV高阈值
         col1, col2 = st.columns(2)
 

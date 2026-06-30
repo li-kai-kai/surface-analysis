@@ -390,15 +390,16 @@ def calculate_nce(x, y, z, field_size_x=0.026, field_size_y=0.008, offset_x=0.0)
 
 def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path, wafer_radius=None):
     """生成SFMA热力图"""
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
 
     mask = ~np.isnan(z_sfma)
     if np.sum(mask) == 0:
+        plt.close(fig)
         return
 
-    cntr = plt.tricontourf(x[mask], y[mask], z_sfma[mask], levels=100, cmap=cmap)
-    cbar = plt.colorbar(cntr)
+    cntr = ax.tricontourf(x[mask], y[mask], z_sfma[mask], levels=100, cmap=cmap)
+    cbar = fig.colorbar(cntr, ax=ax)
     cbar.formatter.set_powerlimits((0, 0))
 
     # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
@@ -407,15 +408,15 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path, wafer_radius=
     else:
         r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
+    ax.add_patch(circle)
 
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"SFMA\nm3s = {metric_val * 1e9:.2f} nm")
+    ax.axis("equal")
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_title(f"SFMA\nm3s = {metric_val * 1e9:.2f} nm")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
+    fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
     # print(f"Saved SFMA heatmap to {output_image_path}")
 
 
@@ -508,10 +509,10 @@ def plot_high_pv_heatmap(
 
 def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None):
     """生成去一阶面形后的热力图"""
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
-    cntr = plt.tricontourf(x, y, z_resid, levels=100, cmap=cmap)
-    cbar = plt.colorbar(cntr)
+    cntr = ax.tricontourf(x, y, z_resid, levels=100, cmap=cmap)
+    cbar = fig.colorbar(cntr, ax=ax)
     cbar.formatter.set_powerlimits((0, 0))
 
     # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
@@ -520,15 +521,15 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None
     else:
         r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
+    ax.add_patch(circle)
 
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"去一阶面形\nPV = {pv * 1e6:.2f} um")
+    ax.axis("equal")
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_title(f"去一阶面形\nPV = {pv * 1e6:.2f} um")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
+    fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
     # print(f"Saved heatmap to {output_image_path}")
 
 
@@ -544,16 +545,17 @@ def plot_tilt_heatmap(
     wafer_radius=None,
 ):
     """生成局部倾斜角度热力图"""
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
 
     mask = ~np.isnan(tilt_urad)
     if np.sum(mask) == 0:
         print("No valid tilt data to plot.")
+        plt.close(fig)
         return
 
-    cntr = plt.tricontourf(x[mask], y[mask], tilt_urad[mask], levels=100, cmap=cmap)
-    cbar = plt.colorbar(cntr)
+    cntr = ax.tricontourf(x[mask], y[mask], tilt_urad[mask], levels=100, cmap=cmap)
+    cbar = fig.colorbar(cntr, ax=ax)
     cbar.set_label("μrad")
 
     # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
@@ -562,15 +564,15 @@ def plot_tilt_heatmap(
     else:
         r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
+    ax.add_patch(circle)
 
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"局部角分布\nmax= {max_val:.2f} μrad, m3s = {metric_val:.2f} μrad")
+    ax.axis("equal")
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_title(f"局部角分布\nmax= {max_val:.2f} μrad, m3s = {metric_val:.2f} μrad")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
+    fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
     # print(f"Saved tilt heatmap to {output_image_path}")
 
 
@@ -622,22 +624,23 @@ def plot_nce_heatmap(
     x, y, z_nce, std_val, grid_x, grid_y, output_image_path, wafer_radius=None
 ):
     """生成NCE面形热力图"""
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     cmap = plt.get_cmap("jet")
 
     mask = ~np.isnan(z_nce)
     if np.sum(mask) == 0:
         print("No valid NCE data to plot.")
+        plt.close(fig)
         return
 
-    cntr = plt.tricontourf(x[mask], y[mask], z_nce[mask], levels=100, cmap=cmap)
-    cbar = plt.colorbar(cntr)
+    cntr = ax.tricontourf(x[mask], y[mask], z_nce[mask], levels=100, cmap=cmap)
+    cbar = fig.colorbar(cntr, ax=ax)
     cbar.formatter.set_powerlimits((0, 0))
 
     for gx in grid_x:
-        plt.axvline(gx, color="k", linewidth=0.5)
+        ax.axvline(gx, color="k", linewidth=0.5)
     for gy in grid_y:
-        plt.axhline(gy, color="k", linewidth=0.5)
+        ax.axhline(gy, color="k", linewidth=0.5)
 
     # 使用晶圆标准半径画圆形轮廓，如果未提供则使用数据最大半径
     if wafer_radius is None:
@@ -645,15 +648,15 @@ def plot_nce_heatmap(
     else:
         r = wafer_radius
     circle = plt.Circle((0, 0), r, color="k", fill=False, linewidth=1)
-    plt.gca().add_patch(circle)
+    ax.add_patch(circle)
 
-    plt.axis("equal")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(f"NCE面形（96场布局）\n3std = {3 * std_val * 1e9:.2f} nm")
+    ax.axis("equal")
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_title(f"NCE面形（96场布局）\n3std = {3 * std_val * 1e9:.2f} nm")
 
-    plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
-    plt.close()
+    fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
     # print(f"Saved NCE heatmap to {output_image_path}")
 
 
@@ -916,6 +919,248 @@ def generate_plotly_scatter(
     return fig
 
 
+def calculate_roa_profile(
+    x,
+    y,
+    z,
+    reference_radius_min=0.020,
+    reference_radius_max=0.100,
+    edge_radius_start=0.120,
+    wafer_radius=None,
+    bin_width=0.0005,
+    reference_fit="quadratic",
+):
+    """
+    Calculate ROA from a radial median surface profile.
+
+    ROA(R) = z_ref(R) - z_profile(R), so a downward edge roll-off produces a
+    positive ROA. Radius is computed from finite raw x/y/z points, then binned
+    into a robust median radial profile before fitting the internal reference.
+    """
+    radius = np.sqrt(x**2 + y**2)
+    valid_mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(radius)
+    if np.sum(valid_mask) < 4:
+        return None
+
+    radius_mm = radius[valid_mask] * 1000
+    z_nm = z[valid_mask] * 1e9
+
+    if wafer_radius is None:
+        wafer_radius_mm = np.nanmax(radius_mm)
+    else:
+        wafer_radius_mm = wafer_radius * 1000
+
+    bin_width_mm = max(bin_width * 1000, 0.001)
+    bins = np.arange(0, wafer_radius_mm + bin_width_mm, bin_width_mm)
+    if len(bins) < 2:
+        return None
+
+    profile_r = []
+    profile_z = []
+    profile_inner = []
+    profile_outer = []
+    for start, end in zip(bins[:-1], bins[1:]):
+        bin_mask = (radius_mm >= start) & (radius_mm < end)
+        if np.sum(bin_mask) < 3:
+            continue
+        profile_r.append((start + end) / 2)
+        profile_z.append(np.nanmedian(z_nm[bin_mask]))
+        profile_inner.append(start)
+        profile_outer.append(end)
+
+    profile_r = np.array(profile_r)
+    profile_z = np.array(profile_z)
+    profile_inner = np.array(profile_inner)
+    profile_outer = np.array(profile_outer)
+    if len(profile_r) < 3:
+        return None
+
+    smooth_surface = profile_z.copy()
+    if len(smooth_surface) >= 7:
+        from scipy.signal import savgol_filter
+
+        window = min(
+            41,
+            len(smooth_surface) if len(smooth_surface) % 2 == 1 else len(smooth_surface) - 1,
+        )
+        window = max(7, window)
+        if window % 2 == 0:
+            window -= 1
+        if window > 3:
+            smooth_surface = savgol_filter(smooth_surface, window, polyorder=3)
+
+    ref_min_mm = reference_radius_min * 1000
+    ref_max_mm = reference_radius_max * 1000
+    if ref_min_mm > ref_max_mm:
+        ref_min_mm, ref_max_mm = ref_max_mm, ref_min_mm
+    ref_min_mm = np.clip(ref_min_mm, 0, wafer_radius_mm)
+    ref_max_mm = np.clip(ref_max_mm, ref_min_mm, wafer_radius_mm)
+
+    ref_mask = (profile_r >= ref_min_mm) & (profile_r <= ref_max_mm)
+    if np.sum(ref_mask) < 2:
+        ref_mask = np.isfinite(profile_z)
+
+    fit_mode = reference_fit.lower()
+    max_degree = {"constant": 0, "linear": 1, "quadratic": 2}.get(fit_mode, 1)
+    degree = min(max_degree, max(0, np.sum(ref_mask) - 1))
+
+    if degree == 0:
+        coeff = np.array([np.nanmedian(profile_z[ref_mask])])
+        z_ref = np.full_like(profile_z, coeff[0], dtype=float)
+        raw_z_ref = np.full_like(z_nm, coeff[0], dtype=float)
+    else:
+        coeff = np.polyfit(profile_r[ref_mask], profile_z[ref_mask], degree)
+        z_ref = np.polyval(coeff, profile_r)
+        raw_z_ref = np.polyval(coeff, radius_mm)
+
+    roa = z_ref - profile_z
+    reference_level = np.nanmedian(z_ref[ref_mask])
+    raw_display_height = z_nm - raw_z_ref
+    display_surface_profile = smooth_surface - z_ref
+    raw_leveled_height = raw_display_height + reference_level
+    leveled_surface_profile = display_surface_profile + reference_level
+
+    edge_start_mm = np.clip(edge_radius_start * 1000, 0, wafer_radius_mm)
+    edge_mask = profile_r >= edge_start_mm
+    if not np.any(edge_mask):
+        edge_mask = profile_r >= profile_r[-1]
+
+    edge_roa = roa[edge_mask]
+    max_roa = np.nanmax(edge_roa) if len(edge_roa) else np.nan
+
+    weights = profile_outer[edge_mask] ** 2 - profile_inner[edge_mask] ** 2
+    valid_weights = np.isfinite(edge_roa) & np.isfinite(weights) & (weights > 0)
+    if np.any(valid_weights):
+        weighted_mean = np.sum(edge_roa[valid_weights] * weights[valid_weights])
+        weighted_mean /= np.sum(weights[valid_weights])
+    else:
+        weighted_mean = np.nan
+
+    p99_roa = np.nanpercentile(edge_roa, 99) if len(edge_roa) else np.nan
+
+    return {
+        "raw_radius": radius_mm,
+        "raw_height": z_nm,
+        "raw_display_height": raw_display_height,
+        "raw_leveled_height": raw_leveled_height,
+        "radius": profile_r,
+        "surface_profile": profile_z,
+        "smooth_surface_profile": smooth_surface,
+        "display_surface_profile": display_surface_profile,
+        "leveled_surface_profile": leveled_surface_profile,
+        "reference_profile": z_ref,
+        "reference_level": reference_level,
+        "roa_profile": roa,
+        "reference_radius_min": ref_min_mm,
+        "reference_radius_max": ref_max_mm,
+        "edge_radius_start": edge_start_mm,
+        "wafer_radius": wafer_radius_mm,
+        "reference_fit": fit_mode,
+        "max_roa": max_roa,
+        "weighted_mean_roa": weighted_mean,
+        "p99_roa": p99_roa,
+    }
+
+
+def generate_roa_figure(profile):
+    """Generate a report-style radial surface profile for ROA analysis."""
+    fig = go.Figure()
+
+    raw_radius = profile["raw_radius"]
+    raw_height = profile["raw_leveled_height"]
+    max_points = 30000
+    if len(raw_radius) > max_points:
+        rng = np.random.default_rng(0)
+        sample_idx = rng.choice(len(raw_radius), size=max_points, replace=False)
+        raw_radius = raw_radius[sample_idx]
+        raw_height = raw_height[sample_idx]
+
+    fig.add_trace(
+        go.Scattergl(
+            x=raw_radius,
+            y=raw_height,
+            mode="markers",
+            name="Data",
+            marker=dict(color="rgba(0, 0, 0, 0.55)", size=2),
+            hovertemplate="R: %{x:.2f} mm<br>z: %{y:.2f} nm<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=profile["radius"],
+            y=profile["leveled_surface_profile"],
+            mode="lines",
+            name="Surface profile",
+            line=dict(color="#111111", width=3),
+            hovertemplate="R: %{x:.2f} mm<br>z profile: %{y:.2f} nm<extra></extra>",
+        )
+    )
+
+    y_values = np.concatenate([raw_height, profile["leveled_surface_profile"]])
+    y_values = y_values[np.isfinite(y_values)]
+    if len(y_values):
+        y_min = np.floor((np.nanmin(y_values) - 10) / 20) * 20
+        y_max = np.ceil((np.nanmax(y_values) + 10) / 20) * 20
+    else:
+        y_min, y_max = -160, 140
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                "ROA Surface Profile"
+                f"<br><sup>Max ROA = {profile['max_roa']:.2f} nm, "
+                f"Weighted mean = {profile['weighted_mean_roa']:.2f} nm, "
+                f"fit = {profile['reference_fit']}</sup>"
+            ),
+            x=0.5,
+            xanchor="center",
+        ),
+        xaxis=dict(title="Radius (mm)", range=[0, profile["wafer_radius"]]),
+        yaxis=dict(
+            title="z [nm]",
+            range=[y_min, y_max],
+            zeroline=False,
+            mirror=True,
+            ticks="outside",
+            showline=True,
+            linecolor="black",
+        ),
+        yaxis2=dict(
+            range=[y_min, y_max],
+            overlaying="y",
+            side="right",
+            ticks="outside",
+            showgrid=False,
+            showline=True,
+            linecolor="black",
+        ),
+        height=520,
+        margin=dict(l=60, r=60, t=80, b=55),
+        hovermode="closest",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        legend=dict(
+            x=1.04,
+            y=0.9,
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="black",
+            borderwidth=1,
+        ),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="#e5e5e5",
+        minor=dict(showgrid=True, gridcolor="#f0f0f0"),
+        mirror=True,
+        ticks="outside",
+        showline=True,
+        linecolor="black",
+    )
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5")
+
+    return fig
+
+
 def extract_scale_from_xyz(input_path):
     """
     从XYZ文件的头部提取scale、radius和完整header信息（基于Zygo标准）
@@ -962,6 +1207,11 @@ def process_xyz(
     sfma_threshold=7.5e-9,
     tilt_threshold=3e-6,
     pv_threshold=50e-6,
+    roa_reference_radius_min=0.020,
+    roa_reference_radius_max=0.100,
+    roa_edge_radius_start=0.120,
+    roa_bin_width=0.0005,
+    roa_reference_fit="quadratic",
 ):
     """
     处理XYZ文件并生成分析结果
@@ -977,6 +1227,11 @@ def process_xyz(
         sfma_threshold: SFMA阈值,单位米 (默认: 7.5nm)
         tilt_threshold: 局部倾斜阈值,单位弧度 (默认: 3urad)
         pv_threshold: PV阈值,单位米 (默认: 50μm)
+        roa_reference_radius_min: ROA参考区内半径,单位米 (默认: 20mm)
+        roa_reference_radius_max: ROA参考区外半径,单位米 (默认: 100mm)
+        roa_edge_radius_start: ROA边缘统计起始半径,单位米 (默认: 120mm)
+        roa_bin_width: ROA径向bin宽度,单位米 (默认: 0.5mm)
+        roa_reference_fit: ROA参考拟合类型: constant/linear/quadratic
     """
     # 如果未指定scale，尝试从文件头部读取
     radius_from_header = None  # 从文件头读取的半径
@@ -1048,6 +1303,10 @@ def process_xyz(
         y = (CENTER_IY - iy) * SCALE
         z_m = z_um * 1e-6
         physical_points.append((x, y, z_m))
+
+    raw_x_arr = np.array([p[0] for p in physical_points])
+    raw_y_arr = np.array([p[1] for p in physical_points])
+    raw_z_arr = np.array([p[2] for p in physical_points])
 
     x_coords = [p[0] for p in physical_points]
     y_coords = [p[1] for p in physical_points]
@@ -1397,7 +1656,32 @@ def process_xyz(
                 showarrow=False,
             )
 
-        return {"pv": pv, "sfma": sfma_metric, "tilt": tilt_metric, "figures": figures}
+        roa_z_arr = remove_tilt(raw_x_arr, raw_y_arr, raw_z_arr)
+        roa_profile = calculate_roa_profile(
+            raw_x_arr,
+            raw_y_arr,
+            roa_z_arr,
+            reference_radius_min=roa_reference_radius_min,
+            reference_radius_max=roa_reference_radius_max,
+            edge_radius_start=roa_edge_radius_start,
+            wafer_radius=np.nanmax(np.sqrt(raw_x_arr**2 + raw_y_arr**2)),
+            bin_width=roa_bin_width,
+            reference_fit=roa_reference_fit,
+        )
+        if roa_profile is not None:
+            figures["roa"] = generate_roa_figure(roa_profile)
+
+        return {
+            "pv": pv,
+            "sfma": sfma_metric,
+            "tilt": tilt_metric,
+            "roa_max": roa_profile["max_roa"] if roa_profile is not None else np.nan,
+            "roa_weighted_mean": (
+                roa_profile["weighted_mean_roa"] if roa_profile is not None else np.nan
+            ),
+            "roa_p99": roa_profile["p99_roa"] if roa_profile is not None else np.nan,
+            "figures": figures,
+        }
 
 
 if __name__ == "__main__":
