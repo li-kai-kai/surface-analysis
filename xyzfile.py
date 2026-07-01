@@ -121,7 +121,6 @@ class XYZfile(object):
         --------------
         **True** if the file was opened and the `header` was succesfully read; **False** otherwise
         """
-        print("open:", filename)
         if Path(filename).is_file():
             self.filepath = filename
         else:
@@ -135,9 +134,7 @@ class XYZfile(object):
                     filetypes=(("Zygo XYZ", "*.xyz"), ("Zygo ascii", "*.ascii")),
                 )
             except ImportError:
-                print("Error: tkinter not installed, cannot open file dialog.")
                 return False
-        print(self.filepath)
 
         acqMode = ("phase", "fringe", "scan")
 
@@ -158,7 +155,6 @@ class XYZfile(object):
                 continue
 
         if file_content is None:
-            print("Error: Unable to read file with any encoding")
             return False
 
         # 现在从文件内容中解析
@@ -170,22 +166,14 @@ class XYZfile(object):
         line_idx += 1
         elem = line.partition(" - Format ")
         if len(elem) != 3:
-            print("This file is not a valid Zygo text file : wrong file identifier")
             return False
         self.Format = int(elem[2])
-        if self.Format < 1 or self.Format > 2:
-            print(self.Format, " is an invalid format value")
 
         if self.Format == 1 and elem[0] != "Zygo XYZ Data File":
-            print(
-                "this file IS NOT a  valid Zygo XYZ Data File : wrong identification line"
-            )
             return False
         if self.Format == 2:
             if elem[0] != "Zygo ASCII Data File":
-                print(
-                    "this file IS NOT a  valid Zygo ASCII Data File : wrong identification line"
-                )
+                return False
 
         # line 2 software
         elem = lines[line_idx].split()
@@ -194,7 +182,6 @@ class XYZfile(object):
         for i in range(3):
             self.Version[i] = int(elem[i + 1])
         self.SoftDate = elem[4].strip('"').rstrip('"')
-        print("version", self.Version, "  date:", self.SoftDate)
 
         # line3 intensity image
         elem = lines[line_idx].split()
@@ -203,36 +190,24 @@ class XYZfile(object):
             self.IntensRect[i] = int(elem[i])
         self.NumBuckets = int(elem[4])
         self.IntensRange = int(elem[5])
-        print(
-            "intensity rect ",
-            self.IntensRect,
-            "  num buckets=",
-            self.NumBuckets,
-            "  intens max=",
-            self.IntensRange,
-        )
 
         # line4 phase image
         elem = lines[line_idx].split()
         line_idx += 1
         for i in range(4):
             self.PhaseRect[i] = int(elem[i])
-        print("phase rect ", self.PhaseRect)
 
         # line 5 Comment
         self.Comment = lines[line_idx].strip('"').rstrip('"')
         line_idx += 1
-        print("file comment:", self.Comment)
 
         # line 6 PartSerialNumber
         self.PartSerialNumber = lines[line_idx].strip('"').rstrip('"')
         line_idx += 1
-        print("part serial number:", self.PartSerialNumber)
 
         # line 7 PartNumber
         self.PartNumber = lines[line_idx].strip('"').rstrip('"')
         line_idx += 1
-        print("part  number:", self.PartNumber)
 
         # line 8 image parameters
         elem = lines[line_idx].split()
@@ -244,15 +219,6 @@ class XYZfile(object):
         self.Obliquity = float(elem[4])  # elem[5] magnification is unused
         self.PixelSize = float(elem[6])
         self.Timestamp = int(elem[7])
-        print(
-            "interferometric scale factor ",
-            self.InterfScaleFactor,
-            "  wavelength ",
-            self.Wavelength,
-            " m",
-        )
-        print("pixel size ", 1000 * self.PixelSize, " mm")
-        print("timestamp ", time.ctime(self.Timestamp))
 
         # line 9 camera and system
         elem = lines[line_idx].split()
@@ -262,8 +228,6 @@ class XYZfile(object):
         for i in range(4):
             self.System[i] = int(elem[i + 2])
         self.ObjectiveName = elem[6].strip('"').rstrip('"')
-        print("camera field ", self.CameraSize)
-        print("system ID:", self.System, "   objective name:", self.ObjectiveName)
 
         # line 10 Acquisition settings
         elem = lines[line_idx].split()
@@ -277,14 +241,6 @@ class XYZfile(object):
             self.AGC[i] = float(elem[i + 5])
         for i in range(3, 5):
             self.AGC[i] = int(elem[i + 5])
-        print(
-            "acquisition mode:",
-            acqMode[self.AcquireMode],
-            "  averaging=",
-            self.IntensAvgs,
-        )
-        print("PZT settings ", self.PZT)
-        print("AGC setting ", self.AGC)
 
         # line 11 phase processing
         elem = lines[line_idx].split()
@@ -295,41 +251,25 @@ class XYZfile(object):
             self.ConnectionProc[i] = int(elem[i + 2])
         self.DataSign = int(elem[0])
         self.CodeVType = int(elem[1])
-        print(
-            "phase resolution ",
-            "High Res" if self.PhaseRes == 1 else "Low Res",
-            " averaging=",
-            self.PhaseAvgs,
-        )
-        print("connection processing  ", self.ConnectionProc)
 
         # line 12 System errors
         elem = lines[line_idx].split()
         line_idx += 1
         self.SubtractSysErr = int(elem[0])
         self.SysErrFile = elem[1].strip('"').rstrip('"')
-        print(
-            "system errors subtracted:",
-            self.SubtractSysErr,
-            "error file:",
-            self.SysErrFile,
-        )
 
         # line 13 Transmission data
         elem = lines[line_idx].split()
         line_idx += 1
         self.RefractiveIndex = float(elem[0])
         self.PartThickness = float(elem[1])
-        print("index=", self.RefractiveIndex, "   part thickness=", self.PartThickness)
 
         if self.Format == 2:
             # line 14 zoom description
             self.ZoomDesc = lines[line_idx].strip('"').rstrip('"')
             line_idx += 1
-            print("zoom description:", self.ZoomDesc, "\n")
 
         if lines[line_idx][0] != "#":
-            print("FORMAT ERROR: expected '#' separator NOT FOUND")
             return False
 
         line_idx += 1
@@ -351,7 +291,6 @@ class XYZfile(object):
                     line = file.readline()
                 self.data = file.tell()
 
-        print("ASCII header succesfully read")
         return True
 
     def getHeight(self, multiplier=1.0):
@@ -371,10 +310,7 @@ class XYZfile(object):
                 file.seek(self.data)
 
                 Data = np.ndarray(shape=(self.PhaseRect[3], self.PhaseRect[2]))
-                # print(Data.shape)
                 line = file.readline()
-                if line[0] == "#":
-                    print("No data")
                 while line[0] != "#":
                     # skip empty line (anomalous lines in Alba data)
                     if line != "\n":
@@ -398,16 +334,12 @@ class XYZfile(object):
                 * self.Obliquity
                 / (4096 if self.PhaseRes == 0 else 32768)
             )
-            print("---WARNING---  reading ASCII format is not yet validated")
             with open(self.filepath) as file:
                 file.seek(self.data)
                 Data = np.ndarray(shape=(self.PhaseRect[3], self.PhaseRect[2]))
                 items = file.readline().split()
-                if items[0][0] == "#":
-                    print("No data")
                 n = 0
                 while items[0][0] != "#":
-                    print(n, len(items))
                     Data.ravel()[n : n + len(items)] = list(map(int, items))
                     n += len(items)
                     items = file.readline().split()

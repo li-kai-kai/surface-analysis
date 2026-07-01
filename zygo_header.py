@@ -261,6 +261,5 @@ def parse_zygo_header(input_path: str) -> Optional[ZygoHeader]:
             zoom_desc=zoom_desc,
         )
 
-    except Exception as e:
-        print(f"解析Zygo文件头失败: {e}")
+    except Exception:
         return None

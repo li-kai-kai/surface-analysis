@@ -417,7 +417,6 @@ def plot_sfma_heatmap(x, y, z_sfma, metric_val, output_image_path, wafer_radius=
 
     fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
-    # print(f"Saved SFMA heatmap to {output_image_path}")
 
 
 def plot_sfma_high_heatmap(
@@ -530,7 +529,6 @@ def plot_surface_heatmap(x, y, z_resid, pv, output_image_path, wafer_radius=None
 
     fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
-    # print(f"Saved heatmap to {output_image_path}")
 
 
 def plot_tilt_heatmap(
@@ -550,7 +548,6 @@ def plot_tilt_heatmap(
 
     mask = ~np.isnan(tilt_urad)
     if np.sum(mask) == 0:
-        print("No valid tilt data to plot.")
         plt.close(fig)
         return
 
@@ -573,7 +570,6 @@ def plot_tilt_heatmap(
 
     fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
-    # print(f"Saved tilt heatmap to {output_image_path}")
 
 
 def plot_high_tilt_heatmap(
@@ -617,7 +613,6 @@ def plot_high_tilt_heatmap(
 
     plt.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close()
-    # print(f"Saved high tilt heatmap to {output_image_path}")
 
 
 def plot_nce_heatmap(
@@ -629,7 +624,6 @@ def plot_nce_heatmap(
 
     mask = ~np.isnan(z_nce)
     if np.sum(mask) == 0:
-        print("No valid NCE data to plot.")
         plt.close(fig)
         return
 
@@ -657,7 +651,6 @@ def plot_nce_heatmap(
 
     fig.savefig(output_image_path, dpi=300, bbox_inches="tight", pad_inches=0)
     plt.close(fig)
-    # print(f"Saved NCE heatmap to {output_image_path}")
 
 
 def generate_plotly_heatmap(
@@ -709,13 +702,11 @@ def generate_plotly_heatmap(
         try:
             points = np.column_stack((x_valid, y_valid))
             Zi = griddata(points, z_valid, (Xi, Yi), method="linear")
-        except Exception as e:
-            print(f"Interpolation failed: {e}")
+        except Exception:
             Zi = None
 
     # Fallback to raw data if needed
     if Zi is None or np.all(np.isnan(Zi)):
-        # print("Fallback to raw data heatmap")
         x_rounded = np.round(x, 9)
         y_rounded = np.round(y, 9)
         xi_final = np.sort(np.unique(x_rounded))
@@ -919,23 +910,20 @@ def generate_plotly_scatter(
     return fig
 
 
-def calculate_roa_profile(
+def calculate_radial_profile(
     x,
     y,
     z,
-    reference_radius_min=0.020,
-    reference_radius_max=0.100,
-    edge_radius_start=0.120,
+    reference_radius_min=0.0,
+    reference_radius_max=None,
     wafer_radius=None,
     bin_width=0.0005,
-    reference_fit="quadratic",
 ):
     """
-    Calculate ROA from a radial median surface profile.
+    Calculate the report-style radial surface profile.
 
-    ROA(R) = z_ref(R) - z_profile(R), so a downward edge roll-off produces a
-    positive ROA. Radius is computed from finite raw x/y/z points, then binned
-    into a robust median radial profile before fitting the internal reference.
+    Radius is computed from finite raw x/y/z points, then binned into a robust
+    median radial profile before fitting the internal linear reference.
     """
     radius = np.sqrt(x**2 + y**2)
     valid_mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z) & np.isfinite(radius)
@@ -957,21 +945,15 @@ def calculate_roa_profile(
 
     profile_r = []
     profile_z = []
-    profile_inner = []
-    profile_outer = []
     for start, end in zip(bins[:-1], bins[1:]):
         bin_mask = (radius_mm >= start) & (radius_mm < end)
         if np.sum(bin_mask) < 3:
             continue
         profile_r.append((start + end) / 2)
         profile_z.append(np.nanmedian(z_nm[bin_mask]))
-        profile_inner.append(start)
-        profile_outer.append(end)
 
     profile_r = np.array(profile_r)
     profile_z = np.array(profile_z)
-    profile_inner = np.array(profile_inner)
-    profile_outer = np.array(profile_outer)
     if len(profile_r) < 3:
         return None
 
@@ -990,7 +972,10 @@ def calculate_roa_profile(
             smooth_surface = savgol_filter(smooth_surface, window, polyorder=3)
 
     ref_min_mm = reference_radius_min * 1000
-    ref_max_mm = reference_radius_max * 1000
+    if reference_radius_max is None:
+        ref_max_mm = wafer_radius_mm
+    else:
+        ref_max_mm = reference_radius_max * 1000
     if ref_min_mm > ref_max_mm:
         ref_min_mm, ref_max_mm = ref_max_mm, ref_min_mm
     ref_min_mm = np.clip(ref_min_mm, 0, wafer_radius_mm)
@@ -1000,43 +985,15 @@ def calculate_roa_profile(
     if np.sum(ref_mask) < 2:
         ref_mask = np.isfinite(profile_z)
 
-    fit_mode = reference_fit.lower()
-    max_degree = {"constant": 0, "linear": 1, "quadratic": 2}.get(fit_mode, 1)
-    degree = min(max_degree, max(0, np.sum(ref_mask) - 1))
+    coeff = np.polyfit(profile_r[ref_mask], profile_z[ref_mask], 1)
+    z_ref = np.polyval(coeff, profile_r)
+    raw_z_ref = np.polyval(coeff, radius_mm)
 
-    if degree == 0:
-        coeff = np.array([np.nanmedian(profile_z[ref_mask])])
-        z_ref = np.full_like(profile_z, coeff[0], dtype=float)
-        raw_z_ref = np.full_like(z_nm, coeff[0], dtype=float)
-    else:
-        coeff = np.polyfit(profile_r[ref_mask], profile_z[ref_mask], degree)
-        z_ref = np.polyval(coeff, profile_r)
-        raw_z_ref = np.polyval(coeff, radius_mm)
-
-    roa = z_ref - profile_z
     reference_level = np.nanmedian(z_ref[ref_mask])
     raw_display_height = z_nm - raw_z_ref
     display_surface_profile = smooth_surface - z_ref
     raw_leveled_height = raw_display_height + reference_level
     leveled_surface_profile = display_surface_profile + reference_level
-
-    edge_start_mm = np.clip(edge_radius_start * 1000, 0, wafer_radius_mm)
-    edge_mask = profile_r >= edge_start_mm
-    if not np.any(edge_mask):
-        edge_mask = profile_r >= profile_r[-1]
-
-    edge_roa = roa[edge_mask]
-    max_roa = np.nanmax(edge_roa) if len(edge_roa) else np.nan
-
-    weights = profile_outer[edge_mask] ** 2 - profile_inner[edge_mask] ** 2
-    valid_weights = np.isfinite(edge_roa) & np.isfinite(weights) & (weights > 0)
-    if np.any(valid_weights):
-        weighted_mean = np.sum(edge_roa[valid_weights] * weights[valid_weights])
-        weighted_mean /= np.sum(weights[valid_weights])
-    else:
-        weighted_mean = np.nan
-
-    p99_roa = np.nanpercentile(edge_roa, 99) if len(edge_roa) else np.nan
 
     return {
         "raw_radius": radius_mm,
@@ -1050,20 +1007,15 @@ def calculate_roa_profile(
         "leveled_surface_profile": leveled_surface_profile,
         "reference_profile": z_ref,
         "reference_level": reference_level,
-        "roa_profile": roa,
         "reference_radius_min": ref_min_mm,
         "reference_radius_max": ref_max_mm,
-        "edge_radius_start": edge_start_mm,
         "wafer_radius": wafer_radius_mm,
-        "reference_fit": fit_mode,
-        "max_roa": max_roa,
-        "weighted_mean_roa": weighted_mean,
-        "p99_roa": p99_roa,
+        "reference_fit": "linear",
     }
 
 
-def generate_roa_figure(profile):
-    """Generate a report-style radial surface profile for ROA analysis."""
+def generate_radial_profile_figure(profile):
+    """Generate a report-style radial surface profile figure."""
     fig = go.Figure()
 
     raw_radius = profile["raw_radius"]
@@ -1105,16 +1057,6 @@ def generate_roa_figure(profile):
         y_min, y_max = -160, 140
 
     fig.update_layout(
-        title=dict(
-            text=(
-                "ROA Surface Profile"
-                f"<br><sup>Max ROA = {profile['max_roa']:.2f} nm, "
-                f"Weighted mean = {profile['weighted_mean_roa']:.2f} nm, "
-                f"fit = {profile['reference_fit']}</sup>"
-            ),
-            x=0.5,
-            xanchor="center",
-        ),
         xaxis=dict(title="Radius (mm)", range=[0, profile["wafer_radius"]]),
         yaxis=dict(
             title="z [nm]",
@@ -1135,7 +1077,7 @@ def generate_roa_figure(profile):
             linecolor="black",
         ),
         height=520,
-        margin=dict(l=60, r=60, t=80, b=55),
+        margin=dict(l=60, r=60, t=25, b=55),
         hovermode="closest",
         plot_bgcolor="white",
         paper_bgcolor="white",
@@ -1184,14 +1126,11 @@ def extract_scale_from_xyz(input_path):
         if header:
             # 从header中提取scale (pixel_size)
             scale = header.pixel_size
-            print(f"从文件头部读取pixel_size: {scale * 1000:.3f}mm")
-
             # 计算晶圆半径：phase_width 或 phase_height / 2 * pixel_size
             wafer_diameter_pixels = max(header.phase_width, header.phase_height)
             radius = (wafer_diameter_pixels / 2) * scale
-            print(f"晶圆尺寸: {wafer_diameter_pixels}像素 → 半径 {radius * 1000:.3f}mm")
-    except Exception as e:
-        print(f"无法从文件读取参数: {e}")
+    except Exception:
+        pass
 
     return scale, radius, header
 
@@ -1207,11 +1146,8 @@ def process_xyz(
     sfma_threshold=7.5e-9,
     tilt_threshold=3e-6,
     pv_threshold=50e-6,
-    roa_reference_radius_min=0.020,
-    roa_reference_radius_max=0.100,
-    roa_edge_radius_start=0.120,
-    roa_bin_width=0.0005,
-    roa_reference_fit="quadratic",
+    profile_reference_radius_min=0.0,
+    profile_effective_radius=None,
 ):
     """
     处理XYZ文件并生成分析结果
@@ -1227,11 +1163,8 @@ def process_xyz(
         sfma_threshold: SFMA阈值,单位米 (默认: 7.5nm)
         tilt_threshold: 局部倾斜阈值,单位弧度 (默认: 3urad)
         pv_threshold: PV阈值,单位米 (默认: 50μm)
-        roa_reference_radius_min: ROA参考区内半径,单位米 (默认: 20mm)
-        roa_reference_radius_max: ROA参考区外半径,单位米 (默认: 100mm)
-        roa_edge_radius_start: ROA边缘统计起始半径,单位米 (默认: 120mm)
-        roa_bin_width: ROA径向bin宽度,单位米 (默认: 0.5mm)
-        roa_reference_fit: ROA参考拟合类型: constant/linear/quadratic
+        profile_reference_radius_min: 剖面参考区内半径,单位米 (默认: 0mm)
+        profile_effective_radius: 剖面有效半径/参考区外半径,单位米 (默认: wafer半径)
     """
     # 如果未指定scale，尝试从文件头部读取
     radius_from_header = None  # 从文件头读取的半径
@@ -1241,12 +1174,6 @@ def process_xyz(
         if scale is None:
             # 如果无法从文件读取，使用默认值
             scale = 0.000175
-            print(f"使用默认scale: {scale}m = {scale * 1000}mm")
-
-    # print(f"Processing {input_path} -> {output_path}")
-    # print(
-    #     f"Parameters: scale={scale}m, step_x={step_x}m, step_y={step_y}m, slit_height={slit_height}m"
-    # )
 
     SCALE = scale
     STEP_X = step_x
@@ -1257,7 +1184,6 @@ def process_xyz(
 
     xyzfile_obj = XYZfile()
     if not xyzfile_obj.openFile(input_path):
-        print("Error: Failed to open XYZ file!")
         return None
 
     # 使用getHeight()方法获取数据(已经是米为单位，NaN替换"No Data")
@@ -1278,7 +1204,6 @@ def process_xyz(
                 raw_data.append((pixel_ix, pixel_iy, z_um))
 
     if len(raw_data) == 0:
-        print("Error: No valid data points found in input file!")
         return None
 
     # 计算中心点(数据范围的中点)
@@ -1291,11 +1216,7 @@ def process_xyz(
     CENTER_IX = (min_ix + max_ix) / 2.0
     CENTER_IY = (min_iy + max_iy) / 2.0
 
-    # print(f"Calculated center: CENTER_IX={CENTER_IX:.1f}, CENTER_IY={CENTER_IY:.1f}")
-    # print(f"Data range: ix=[{min_ix}, {max_ix}], iy=[{min_iy}, {max_iy}]")
-
     # 第二遍: 转换到物理坐标并分箱
-    # print("Second pass: Converting to physical coordinates and binning...")
 
     physical_points = []
     for ix, iy, z_um in raw_data:
@@ -1317,14 +1238,8 @@ def process_xyz(
     START_X = np.floor(min_x / STEP_X) * STEP_X
     START_Y = np.floor(min_y / STEP_Y) * STEP_Y
 
-    # print(
-    #     f"Physical bounds: x=[{min_x:.6f}, {max_x:.6f}], y=[{min_y:.6f}, {max_y:.6f}]"
-    # )
-    # print(f"Grid starts: START_X={START_X:.6f}, START_Y={START_Y:.6f}")
-
     # 数据分箱
     bins = {}
-    data_count = 0
 
     for x, y, z_m in physical_points:
         k_x = int(round((x - START_X) / STEP_X))
@@ -1336,9 +1251,6 @@ def process_xyz(
 
         bins[key][0] += z_m
         bins[key][1] += 1
-        data_count += 1
-
-    # print(f"Binned {data_count} data points into {len(bins)} bins.")
 
     # 应用边缘清除
     if edge_clearance > 0:
@@ -1362,11 +1274,6 @@ def process_xyz(
                 filtered_bins[key] = value
 
         bins = filtered_bins
-        print(f"原始最大半径: {original_radius_mm:.0f}mm")
-        print(f"清除后半径: {clearance_radius_mm:.0f}mm")
-        print(
-            f"After edge clearance ({edge_clearance * 1000:.1f}mm): {len(bins)} bins remaining."
-        )
 
     # 输出处理后的数据
     plot_x, plot_y, plot_z = [], [], []
@@ -1383,8 +1290,6 @@ def process_xyz(
             plot_x.append(grid_x)
             plot_y.append(grid_y)
             plot_z.append(avg_z)
-
-    # print(f"Saved processed data to {output_path}")
 
     # 可视化分析
     if len(plot_x) > 0:
@@ -1403,44 +1308,6 @@ def process_xyz(
 
         # 使用数据的实际最大半径作为晶圆半径，确保轮廓能包含所有数据点
         wafer_radius = data_max_radius
-
-        # 使用从文件头读取的半径（如果有的话），否则使用数据计算的半径
-        if radius_from_header is not None:
-            # 文件头信息仅供参考，使用实际数据的最大半径
-            print(f"\n晶圆尺寸信息:")
-            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  数据最大半径: {data_max_radius * 1000:.1f}mm")
-            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm")
-            print(
-                f"  轮廓直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
-            )
-            print(f"  文件头信息: {radius_from_header * 1000:.1f}mm (仅供参考)")
-            if x_extent < y_extent * 0.95:
-                print(
-                    f"  ⚠️  注意: X方向({x_extent * 1000:.1f}mm)小于Y方向，左右边缘可能被裁切"
-                )
-            print()
-        else:
-            print(f"\n晶圆尺寸信息:")
-            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  数据最大半径: {data_max_radius * 1000:.1f}mm")
-            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm")
-            print(
-                f"  轮廓直径: {wafer_radius * 2 * 1000:.1f}mm ({wafer_radius * 2 / 0.0254:.1f}英寸)"
-            )
-            if x_extent < y_extent * 0.95:
-                print(
-                    f"  ⚠️  注意: X方向({x_extent * 1000:.1f}mm)小于Y方向，左右边缘可能被裁切"
-                )
-            print()
-            print()
-            print(f"\n晶圆尺寸信息:")
-            print(
-                f"  识别尺寸: {wafer_size_inch}英寸 (标准半径: {wafer_radius_standard * 1000:.1f}mm)"
-            )
-            print(f"  数据范围: X={x_extent * 1000:.1f}mm, Y={y_extent * 1000:.1f}mm")
-            print(f"  数据半径: {data_radius * 1000:.1f}mm")
-            print(f"  轮廓半径: {wafer_radius * 1000:.1f}mm (含1.5%边距)\n")
 
         # 计算z_resid用于SFMA和Tilt分析
         z_resid = remove_tilt(x_arr, y_arr, z_arr)
@@ -1656,30 +1523,22 @@ def process_xyz(
                 showarrow=False,
             )
 
-        roa_z_arr = remove_tilt(raw_x_arr, raw_y_arr, raw_z_arr)
-        roa_profile = calculate_roa_profile(
+        profile_z_arr = remove_tilt(raw_x_arr, raw_y_arr, raw_z_arr)
+        radial_profile = calculate_radial_profile(
             raw_x_arr,
             raw_y_arr,
-            roa_z_arr,
-            reference_radius_min=roa_reference_radius_min,
-            reference_radius_max=roa_reference_radius_max,
-            edge_radius_start=roa_edge_radius_start,
+            profile_z_arr,
+            reference_radius_min=profile_reference_radius_min,
+            reference_radius_max=profile_effective_radius,
             wafer_radius=np.nanmax(np.sqrt(raw_x_arr**2 + raw_y_arr**2)),
-            bin_width=roa_bin_width,
-            reference_fit=roa_reference_fit,
         )
-        if roa_profile is not None:
-            figures["roa"] = generate_roa_figure(roa_profile)
+        if radial_profile is not None:
+            figures["profile"] = generate_radial_profile_figure(radial_profile)
 
         return {
             "pv": pv,
             "sfma": sfma_metric,
             "tilt": tilt_metric,
-            "roa_max": roa_profile["max_roa"] if roa_profile is not None else np.nan,
-            "roa_weighted_mean": (
-                roa_profile["weighted_mean_roa"] if roa_profile is not None else np.nan
-            ),
-            "roa_p99": roa_profile["p99_roa"] if roa_profile is not None else np.nan,
             "figures": figures,
         }
 
